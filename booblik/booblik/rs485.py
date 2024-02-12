@@ -8,6 +8,7 @@ import serial
 # ethRS485_converter_port = 26
 
 PORT = '/dev/ttyUSB0'
+# Настройка последовательного порта для RS485-USB преобразователя
 adapter = serial.Serial(port=PORT, baudrate=9600, timeout=0.2, parity=serial.PARITY_NONE, \
                     stopbits=serial.STOPBITS_ONE, bytesize=8)
 
@@ -17,12 +18,14 @@ class ETHRS485(Node):
         super().__init__('rs485')
         
         #For RS485 - USB converter
+        # Подписка на топик для получения данных, которые будут отправлены через RS485
         self.rx_ = self.create_subscription(
             UInt8MultiArray,
             '/booblik/rs485Rx',
             self.request_callback,
             10
         )
+        # Издатель для отправки данных, полученных от RS485 устройства
         self.tx_ = self.create_publisher(
             UInt8MultiArray,
             '/booblik/rs485Tx',
@@ -36,6 +39,7 @@ class ETHRS485(Node):
 
 
     def request_callback(self, data:UInt8MultiArray):
+        """Обработка данных из топика для отправки через RS485."""
         # try:
         #     print("Request:", list(data.data))
         #     self.socket_.sendall(data.data)
@@ -49,16 +53,17 @@ class ETHRS485(Node):
 
         try:
             print("Req: ", list(data.data))
-            adapter.write(data.data)
-            res = adapter.read(100)
+            adapter.write(data.data)  # Отправка данных через RS485
+            res = adapter.read(100)  # Чтение ответа от устройства
             if len(list(res)) != 0:
                 print("Res: ", list(res))
-                self.tx_answer(list(res))
+                self.tx_answer(list(res))  # Отправка полученных данных обратно в ROS
         except Exception as e:
             print("Request error")
             print(e)
     
     def tx_answer (self, data):
+        """Публикация ответа от RS485 устройства в ROS."""
         try:
             msg = UInt8MultiArray()
             

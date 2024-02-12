@@ -8,12 +8,13 @@ import struct
 
 
 class ECTDSSensor(Node):
-    sensor_idx = 0x4
-    rqst_msg = [sensor_idx, 0x03, 0x0, 0x0, 0x0, 0x2, 0xFF, 0xFF]
+    sensor_idx = 0x4    # Идентификатор датчика EC/TDS
+    rqst_msg = [sensor_idx, 0x03, 0x0, 0x0, 0x0, 0x2, 0xFF, 0xFF]  # Шаблон запроса к датчику
 
 
     def __init__(self):
         super().__init__('ec_tds_sensor')
+        # Создание издателя и подписчика для обмена сообщениями через RS485
         self.tx_ = self.create_publisher(
             UInt8MultiArray,
             '/booblik/rs485Rx',
@@ -25,11 +26,13 @@ class ECTDSSensor(Node):
             self.recieve_callback,
             10
         )
+        # Запуск потока для периодической отправки запросов к датчику
         self.sendThread = Thread(
             target=self.request_thread, daemon=True).start()
 
 
     def check_crc (self, data):
+        """Проверка CRC для подтверждения целостности данных."""
         size = len(data)
         if (size < 3):
             return False
@@ -44,6 +47,7 @@ class ECTDSSensor(Node):
 
 
     def check_idx (self, data):
+        """Проверка, что данные от ожидаемого датчика."""
         if data[0] == self.sensor_idx:
             return True
         else:
@@ -51,9 +55,10 @@ class ECTDSSensor(Node):
 
 
     def parce_msg (self, data):
+        """Разбор полученного сообщения и извлечение из него данных."""
         try:
-            calib = struct.unpack(">H", data[3:5])[0] / 10.0
-            tds = struct.unpack(">H", data[5:7])[0] / 10.0
+            calib = struct.unpack(">H", data[3:5])[0] / 10.0  # Калибровочное значение
+            tds = struct.unpack(">H", data[5:7])[0] / 10.0  # Значение TDS 
             return (calib, tds)
         except Exception as e:
             print("Parce error:", e)
@@ -61,6 +66,7 @@ class ECTDSSensor(Node):
 
 
     def recieve_callback(self, msg):
+        """Обработка полученных данных."""
         data = msg.data
 
         if self.check_crc(data) == False:
@@ -74,6 +80,7 @@ class ECTDSSensor(Node):
 
 
     def get_rqst_msg (self):
+        """Генерация сообщения запроса с корректным CRC."""
         l = self.rqst_msg
         crc = libscrc.modbus(bytes(l[0:(len(l) - 2)]))
         crcLow = crc & 0xFF
@@ -84,6 +91,7 @@ class ECTDSSensor(Node):
 
 
     def request_thread (self):
+        """Отправка запросов к датчику с регулярным интервалом."""
         while True:
             request_message = self.get_rqst_msg()
             # print(request_message)
@@ -92,6 +100,7 @@ class ECTDSSensor(Node):
 
     
     def send_message(self, message):
+        """Отправка сообщения датчику через RS485."""
         try:
             msg = UInt8MultiArray()
 
