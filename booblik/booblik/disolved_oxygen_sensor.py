@@ -8,12 +8,13 @@ import struct
 
 
 class Sensor(Node):
-    sensor_idx = 0x6
-    rqst_msg = [sensor_idx, 0x03, 0x00, 0x00, 0x00, 0x06, 0xFF, 0xFF]
+    sensor_idx = 0x6  # Уникальный идентификатор датчика
+    rqst_msg = [sensor_idx, 0x03, 0x00, 0x00, 0x00, 0x06, 0xFF, 0xFF]  # Шаблон запроса данных с датчика
 
 
     def __init__(self):
         super().__init__('HT_sensor')
+        # Создание издателя и подписчика для обмена сообщениями через RS485
         self.tx_ = self.create_publisher(
             UInt8MultiArray,
             '/booblik/rs485Rx',
@@ -25,11 +26,13 @@ class Sensor(Node):
             self.recieve_callback,
             10
         )
+        # Запуск потока для периодической отправки запросов к датчику
         self.sendThread = Thread(
             target=self.request_thread, daemon=True).start()
 
 
     def check_crc (self, data):
+        """Проверка CRC для подтверждения целостности данных."""
         size = len(data)
         if (size < 3):
             return False
@@ -44,6 +47,7 @@ class Sensor(Node):
 
 
     def check_idx (self, data):
+        """Проверка, что данные от ожидаемого датчика."""
         if data[0] == self.sensor_idx:
             return True
         else:
@@ -51,10 +55,11 @@ class Sensor(Node):
 
 
     def parce_msg (self, data):
+        """Разбор полученного сообщения и извлечение из него данных."""
         try:
-            oxygen_saturation = struct.unpack(">f", data[3:7])[0]
-            oxygen_concentration = struct.unpack(">f", data[7:11])[0]
-            temperature = struct.unpack(">f", data[11:15])[0]
+            oxygen_saturation = struct.unpack(">f", data[3:7])[0]  # Насыщение кислородом
+            oxygen_concentration = struct.unpack(">f", data[7:11])[0]  # Концентрация кислорода
+            temperature = struct.unpack(">f", data[11:15])[0]  # Температура (внутренний параметр датчика, не температура воды)
             return (oxygen_saturation, oxygen_concentration, temperature)
         except:
             print("parce error")
@@ -62,6 +67,7 @@ class Sensor(Node):
 
 
     def recieve_callback(self, msg):
+        """Обработка полученных данных."""
         data = msg.data
 
         if self.check_crc(data) == False:
@@ -75,6 +81,7 @@ class Sensor(Node):
 
 
     def get_rqst_msg (self):
+        """Генерация сообщения запроса с корректным CRC."""
         l = self.rqst_msg
         crc = libscrc.modbus(bytes(l[0:6]))
         crcLow = crc & 0xFF
@@ -85,6 +92,7 @@ class Sensor(Node):
 
 
     def request_thread (self):
+        """Отправка запросов к датчику с регулярным интервалом."""
         while True:
             request_message = self.get_rqst_msg()
             self.send_message(request_message)
@@ -92,6 +100,7 @@ class Sensor(Node):
 
     
     def send_message(self, message):
+        """Отправка сообщения датчику через RS485."""
         try:
             msg = UInt8MultiArray()
 

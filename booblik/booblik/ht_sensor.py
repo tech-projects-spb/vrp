@@ -8,12 +8,13 @@ import struct
 
 
 class HTSensor(Node):
-    sensor_idx = 0x2
-    rqst_msg = [sensor_idx, 0x03, 0x00, 0x00, 0x00, 0x02, 0xFF, 0xFF]
+    sensor_idx = 0x2    # Идентификатор датчика температуры и влажности
+    rqst_msg = [sensor_idx, 0x03, 0x00, 0x00, 0x00, 0x02, 0xFF, 0xFF]  # Шаблон запроса данных
 
 
     def __init__(self):
         super().__init__('ht_sensor')
+        # Создание издателя и подписчика для обмена сообщениями через RS485
         self.tx_ = self.create_publisher(
             UInt8MultiArray,
             '/booblik/rs485Rx',
@@ -25,11 +26,13 @@ class HTSensor(Node):
             self.recieve_callback,
             10
         )
+        # Запуск потока для периодической отправки запросов к датчику
         self.sendThread = Thread(
             target=self.request_thread, daemon=True).start()
 
 
     def check_crc (self, data):
+        """Проверка CRC для подтверждения целостности данных."""
         size = len(data)
         if (size < 3):
             return False
@@ -44,6 +47,7 @@ class HTSensor(Node):
 
 
     def check_idx (self, data):
+        """Проверка, что данные пришли от ожидаемого датчика."""
         if data[0] == self.sensor_idx:
             return True
         else:
@@ -51,9 +55,10 @@ class HTSensor(Node):
 
 
     def parce_msg (self, data):
+        """Разбор сообщения и извлечение данных о температуре и влажности."""
         try:
-            humidity = struct.unpack(">H", data[3:5])[0] / 10
-            temperature = struct.unpack(">H", data[5:7])[0] / 10
+            humidity = struct.unpack(">H", data[3:5])[0] / 10  # Влажность, переведенная в %
+            temperature = struct.unpack(">H", data[5:7])[0] / 10  # Температура, переведенная в градусы Цельсия
             return (temperature, humidity)
         except:
             print("Temp parce error")
@@ -61,6 +66,7 @@ class HTSensor(Node):
 
 
     def recieve_callback(self, msg):
+        """Обработка полученных данных."""
         data = msg.data
 
         if self.check_crc(data) == False:
