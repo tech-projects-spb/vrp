@@ -35,31 +35,28 @@ class TroykaMotorDriver:
     def __init__(self, config: MotorsConfig, freq: float = 500, block_time: float = 1) -> None:
         self.config = config  # Сохранение конфигурации моторов
         self.freq = freq  # Частота PWM сигнала
+        self.coeff = self.freq / 1000  # Определение коэффициента масштабирования
         # Настройка пинов для управления моторами
         self.ap = troykahat.analog_io()
         self.ap._setPwmFreq(self.freq)  # Устанавливаем частоту PWM
         # Установка режима работы пинов
         self.ap.pinMode(self.config.left.pin_ap, self.ap.OUTPUT)
         self.ap.pinMode(self.config.right.pin_ap, self.ap.OUTPUT)
-        self.ap.pinMode(self.config.back.pin_ap, self.ap.OUTPUT)
-        # Инициализация моторов в нейтральное положение
-        self.initializeMotors()
+        self.ap.pinMode(self.config.back.pin_ap, self.ap.OUTPUT)    
+        self.initializeMotors()  # Инициализация моторов в нейтральное положение
 
-        self.coeff = self.freq / 1000
         self.last_time = time.time()  # Время последней команды управления
         self.block_time = block_time  # Время блокировки управления после последней команды
         self.alarm = False
         Thread(target=self.checkLoop, daemon=True).start() # Запускаем поток для контроля блокировки
 
-
     def initializeMotors(self):
         """Инициализация моторов в нейтральное положение."""
-        p = self.stop * self.freq / 1000
+        p = self.stop * self.coeff
         self.ap.analogWrite(self.config.left.pin_ap, p)
         self.ap.analogWrite(self.config.right.pin_ap, p)
         self.ap.analogWrite(self.config.back.pin_ap, p)
         time.sleep(2)  # Задержка для стабилизации системы
-
 
     def setThrust(self, left: float, right: float, back: float) -> None:
         """Установка тяги для каждого из моторов."""
