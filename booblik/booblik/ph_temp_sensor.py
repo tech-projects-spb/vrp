@@ -3,13 +3,14 @@ from rclpy.node import Node
 from std_msgs.msg import UInt8MultiArray
 from threading import Thread
 import time
-import libscrc
-import struct
+import libscrc  # Библиотека для расчета CRC
+import struct  # Модуль для преобразования байтов в значения Python
 
 
 class PHTempSensor(Node):
     sensor_idx = 0x5    # Идентификатор датчика температуры и pH
-    rqst_msg = [sensor_idx, 0x03, 0x0, 0x0, 0x0, 0x2, 0xFF, 0xFF]  # Шаблон запроса данных
+    # Шаблон запроса данных с датчика, включает в себя команду чтения и адрес регистра
+    rqst_msg = [sensor_idx, 0x03, 0x0, 0x0, 0x0, 0x2, 0xFF, 0xFF
 
 
     def __init__(self):
@@ -32,14 +33,15 @@ class PHTempSensor(Node):
 
 
     def check_crc (self, data):
-        """Проверка CRC для подтверждения целостности данных."""
+        """Проверка контрольной суммы полученных данных для подтверждения их целостности."""
         size = len(data)
         if (size < 3):
             return False
-        
+        # Расчет CRC для проверенной части сообщения
         crc = libscrc.modbus(bytes(data[0:(size - 2)]))
         crcLow = crc & 0xFF
         crcHigh = crc >> 8
+        # Сравнение расчетного CRC с полученным в сообщении
         if (crcLow == data[size - 2]) and (crcHigh == data[size - 1]):
             return True
         else:
@@ -47,7 +49,7 @@ class PHTempSensor(Node):
 
 
     def check_idx (self, data):
-        """Проверка, что данные пришли от ожидаемого датчика."""
+        """Проверка, что сообщение пришло от ожидаемого датчика."""
         if data[0] == self.sensor_idx:
             return True
         else:
@@ -80,7 +82,7 @@ class PHTempSensor(Node):
 
 
     def get_rqst_msg (self):
-        """Генерация сообщения запроса с корректным CRC."""
+        """Подготовка сообщения запроса к датчику с корректным CRC."""
         l = self.rqst_msg
         crc = libscrc.modbus(bytes(l[0:(len(l) - 2)]))
         crcLow = crc & 0xFF
@@ -91,7 +93,7 @@ class PHTempSensor(Node):
 
 
     def request_thread (self):
-        """Отправка запросов к датчику с регулярным интервалом."""
+        """Отправка запросов к датчику с заданным интервалом."""
         while True:
             request_message = self.get_rqst_msg()
             # print(request_message)
@@ -100,7 +102,7 @@ class PHTempSensor(Node):
 
     
     def send_message(self, message):
-        """Отправка сообщения датчику через RS485."""
+        """Отправка сообщения датчику через интерфейс RS485."""
         try:
             msg = UInt8MultiArray()
 

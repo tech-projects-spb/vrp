@@ -7,7 +7,7 @@ import serial
 # ethRS485_converter_address = "192.168.0.7"
 # ethRS485_converter_port = 26
 
-PORT = '/dev/ttyUSB0'
+PORT = '/dev/ttyUSB0' # рекомендуется проверять порт подключения
 # Настройка последовательного порта для RS485-USB преобразователя
 adapter = serial.Serial(port=PORT, baudrate=9600, timeout=0.2, parity=serial.PARITY_NONE, \
                     stopbits=serial.STOPBITS_ONE, bytesize=8)

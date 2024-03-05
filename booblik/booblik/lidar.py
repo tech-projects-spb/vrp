@@ -12,6 +12,7 @@ from sensor_msgs.msg import LaserScan
 
 @dataclass
 class LidarConfig:
+    """Конфигурация для подключения к лидару."""
     port: str   # Порт подключения
     baudrate: int   # Скорость передачи данных
 
@@ -29,11 +30,12 @@ class LidarNode(Node):
         self.lidar_
 
     def start(self):
-        # Запуск потока для чтения данных с лидара
+        """Запуск потока для чтения данных с лидара."""
         Thread(target=self._readLoop, daemon=False).start()
 
     # Приватный метод для чтения данных с лидара
     def _readLoop(self):
+        """Поток для чтения данных с лидара и их публикации."""
         ser = serial.Serial(
             self.config.port,
             self.config.baudrate
@@ -45,7 +47,8 @@ class LidarNode(Node):
 
         # Кольцевой буфер для чтения пакетов байт с последовательного порта
         while True:
-            buffer.extend(ser.read(256))
+            buffer.extend(ser.read(256)) # Чтение данных из порта
+            # Поиск начала пакета данных
             index = buffer.find(bytearray([0xCE, 0xFA]), 1)
             while index != -1 and index:
                 packet = buffer[0:index]
@@ -54,6 +57,7 @@ class LidarNode(Node):
                 index = buffer.find(bytearray([0xCE, 0xFA]), 1)
 
     def _parsePacket(self, packet: bytearray):
+        """Обработка пакета данных от лидара."""
         # Проверка на минимально допустимую длину пакета
         if len(packet) <= 10:
             print('too low length')
@@ -103,7 +107,7 @@ class LidarNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    task = LidarNode(LidarConfig('/dev/ttyUSB0', 230400))
+    task = LidarNode(LidarConfig('/dev/ttyUSB0', 230400)) # рекомендуется проверять порт подключения
     task.start()
     rclpy.spin(task)
     rclpy.shutdown()

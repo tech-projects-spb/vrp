@@ -2,14 +2,16 @@ from threading import Thread
 import rclpy
 from rclpy.node import Node
 import time
-import raspy_qmc5883l
-from sensor_msgs.msg import Imu
+import raspy_qmc5883l  # Библиотека для работы с магнитометром QMC5883L
+from sensor_msgs.msg import Imu  # Стандартный тип сообщения ROS для данных IMU
 import math
 
 def degrees_to_radians(degrees):
+    """Конвертация углов из градусов в радианы"""
     return degrees * math.pi / 180
 
 def euler_to_quaternion(yaw, pitch, roll):
+    """Преобразование углов Эйлера в кватернион для описания ориентации в пространстве"""
     cy = math.cos(yaw * 0.5)
     sy = math.sin(yaw * 0.5)
     cp = math.cos(pitch * 0.5)
@@ -27,10 +29,13 @@ def euler_to_quaternion(yaw, pitch, roll):
 class QMC5883LNode(Node):
     def __init__(self, name='QMC5883L'):
         super().__init__(name)
+        # Запуск потока для чтения данных с магнитометра
         Thread(target=self._readLoop, daemon=True).start()
         while 1:
             try:
+                # Инициализация магнитометра
                 self.sensor = raspy_qmc5883l.QMC5883L()
+                # Загрузка калибровочных данных для магнитометра
                 #TODO read from config? 
                 self.sensor.calibration = [[1.0817261189833043, -0.06705906178799911, -485.7272567957916], 
                       [-0.06705906178799906, 1.0550242422352802, -2953.8769005789645], 
@@ -39,7 +44,8 @@ class QMC5883LNode(Node):
             except:
                 print("Init Error. Try init again...")
                 time.sleep(0.1)
-        
+
+        # Создание издателя для публикации данных IMU        
         self.imu_ = self.create_publisher(
             Imu,
             '/booblik/sensors/imu/imu/data',
@@ -47,17 +53,21 @@ class QMC5883LNode(Node):
             
 
     def _readLoop(self):
+        """Поток для непрерывного чтения и публикации данных с магнитометра."""
         imu = Imu()
         while True:
-            time.sleep(0.1)
+            time.sleep(0.1)  # Ограничение частоты чтения
             try:
-                #TODO convert to quat?
+                # Получение азимутального угла от магнитометра 
                 bearing = self.sensor.get_bearing()
                 print(bearing)
 
+                # Преобразование азимута в кватернион
                 qw, qx, qy, qz = euler_to_quaternion(degrees_to_radians(bearing), 0, 0)
 
-                imu = Imu()
+                # Формирование и публикация сообщения IMU
+                imu = Imu() 
+                # Заполнение данных ориентации
                 imu.orientation.x = qx
                 imu.orientation.y = qy
                 imu.orientation.z = qz
