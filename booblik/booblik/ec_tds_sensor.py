@@ -57,9 +57,9 @@ class ECTDSSensor(Node):
     def parce_msg (self, data):
         """Разбор полученного сообщения и извлечение из него данных."""
         try:
-            calib = struct.unpack(">H", data[3:5])[0] / 10.0  # Калибровочное значение
+            # calib = struct.unpack(">H", data[3:5])[0] / 10.0  # Калибровочное значение
             tds = struct.unpack(">H", data[5:7])[0] / 10.0  # Значение TDS 
-            return (calib, tds)
+            return (tds)
         except Exception as e:
             print("Parce error:", e)
             return (0.0, 0.0)

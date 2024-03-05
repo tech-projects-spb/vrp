@@ -59,8 +59,8 @@ class Sensor(Node):
         try:
             oxygen_saturation = struct.unpack(">f", data[3:7])[0]  # Насыщение кислородом
             oxygen_concentration = struct.unpack(">f", data[7:11])[0]  # Концентрация кислорода
-            temperature = struct.unpack(">f", data[11:15])[0]  # Температура (внутренний параметр датчика, не температура воды)
-            return (oxygen_saturation, oxygen_concentration, temperature)
+            #temperature = struct.unpack(">f", data[11:15])[0]  # Температура (внутренний параметр датчика, не температура воды)
+            return (oxygen_saturation, oxygen_concentration)
         except:
             print("parce error")
             return (0.0, 0.0, 0.0)
