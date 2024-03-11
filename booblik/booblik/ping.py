@@ -23,7 +23,7 @@ class Ping1dNode(Node):
     def __init__(self, name='echo_ping'):
         super().__init__(name)
         self.config = PingConfig(
-            '/dev/ttyUSB0',  # рекомендуется проверять порт подключения
+            '/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.2:1.0-port0',  # порт подключения в соответствии с паспортом
             115200,
             500,
             1490

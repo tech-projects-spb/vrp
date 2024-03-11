@@ -107,7 +107,7 @@ class LidarNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    task = LidarNode(LidarConfig('/dev/ttyUSB0', 230400)) # рекомендуется проверять порт подключения
+    task = LidarNode(LidarConfig('/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.4:1.0-port0', 230400)) # порт подключения в соответствии с паспортом
     task.start()
     rclpy.spin(task)
     rclpy.shutdown()
