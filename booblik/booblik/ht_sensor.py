@@ -3,17 +3,19 @@ from rclpy.node import Node
 from std_msgs.msg import UInt8MultiArray
 from threading import Thread
 import time
-import libscrc
-import struct
+import libscrc  # Библиотека для расчета CRC
+import struct  # Модуль для преобразования байтов в значения Python
 
 
 class HTSensor(Node):
-    sensor_idx = 0x2
-    rqst_msg = [sensor_idx, 0x03, 0x00, 0x00, 0x00, 0x02, 0xFF, 0xFF]
+    sensor_idx = 0x2    # Идентификатор датчика температуры и влажности
+    # Шаблон запроса данных с датчика, включает в себя команду чтения и адрес регистра
+    rqst_msg = [sensor_idx, 0x03, 0x00, 0x00, 0x00, 0x02, 0xFF, 0xFF] 
 
 
     def __init__(self):
         super().__init__('ht_sensor')
+        # Создание издателя и подписчика для обмена сообщениями через RS485
         self.tx_ = self.create_publisher(
             UInt8MultiArray,
             '/booblik/rs485Rx',
@@ -25,18 +27,21 @@ class HTSensor(Node):
             self.recieve_callback,
             10
         )
+        # Запуск потока для периодической отправки запросов к датчику
         self.sendThread = Thread(
             target=self.request_thread, daemon=True).start()
 
 
     def check_crc (self, data):
+        """Проверка контрольной суммы полученных данных для подтверждения их целостности."""
         size = len(data)
         if (size < 3):
             return False
-        
+        # Расчет CRC для проверенной части сообщения                
         crc = libscrc.modbus(bytes(data[0:(size - 2)]))
         crcLow = crc & 0xFF
         crcHigh = crc >> 8
+        # Сравнение расчетного CRC с полученным в сообщении
         if (crcLow == data[size - 2]) and (crcHigh == data[size - 1]):
             return True
         else:
@@ -44,6 +49,7 @@ class HTSensor(Node):
 
 
     def check_idx (self, data):
+        """Проверка, что сообщение пришло от ожидаемого датчика."""
         if data[0] == self.sensor_idx:
             return True
         else:
@@ -51,9 +57,10 @@ class HTSensor(Node):
 
 
     def parce_msg (self, data):
+        """Разбор сообщения и извлечение данных о температуре и влажности."""
         try:
-            humidity = struct.unpack(">H", data[3:5])[0] / 10
-            temperature = struct.unpack(">H", data[5:7])[0] / 10
+            humidity = struct.unpack(">H", data[3:5])[0] / 10  # Влажность, переведенная в %
+            temperature = struct.unpack(">H", data[5:7])[0] / 10  # Температура, переведенная в градусы Цельсия
             return (temperature, humidity)
         except:
             print("Temp parce error")
@@ -61,6 +68,7 @@ class HTSensor(Node):
 
 
     def recieve_callback(self, msg):
+        """Обработка полученных данных."""
         data = msg.data
 
         if self.check_crc(data) == False:
@@ -74,6 +82,7 @@ class HTSensor(Node):
 
 
     def get_rqst_msg (self):
+        """Подготовка сообщения запроса к датчику с корректным CRC."""
         l = self.rqst_msg
         crc = libscrc.modbus(bytes(l[0:6]))
         crcLow = crc & 0xFF
@@ -84,6 +93,7 @@ class HTSensor(Node):
 
 
     def request_thread (self):
+        """Отправка запросов к датчику с заданным интервалом."""
         while True:
             request_message = self.get_rqst_msg()
             self.send_message(request_message)
@@ -91,6 +101,7 @@ class HTSensor(Node):
 
     
     def send_message(self, message):
+        """Отправка сообщения датчику через интерфейс RS485."""
         try:
             msg = UInt8MultiArray()
 

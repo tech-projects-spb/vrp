@@ -3,14 +3,15 @@ import serial
 from threading import Thread
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import NavSatFix
-import pynmea2
+from sensor_msgs.msg import NavSatFix  # Тип сообщения ROS для данных о местоположении
+import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS
 
 
 @dataclass
 class GpsConfig:
-    port: str
-    baudrate: int
+    """Конфигурация подключения к GPS модулю."""
+    port: str  # Порт, к которому подключен GPS
+    baudrate: int  # Скорость передачи данных
 
 
 class GpsImuNode(Node):
@@ -18,15 +19,18 @@ class GpsImuNode(Node):
 
     def __init__(self, name='ws_m181'):
         super().__init__(name)
-        self.config = GpsConfig('/dev/serial0', 115200)
+        self.config = GpsConfig('/dev/serial0', 115200)  # Настройки подключения к GPS
+        # Создание издателя для публикации данных о местоположении
         self.nav_ = self.create_publisher(
             NavSatFix,
             '/booblik/sensors/gps/navsat/fix',
             10)
-        Thread(target=self._readLoop, daemon=True).start()
+        Thread(target=self._readLoop, daemon=True).start()  # ЗЗапуск отдельного потока для чтения данных с GPS
 
 
     def _readLoop(self):
+        """Цикл для чтения данных с GPS и их публикации."""
+        # Инициализация подключения к GPS через последовательный порт
         ser = serial.Serial(
             self.config.port,
             self.config.baudrate,
@@ -34,12 +38,13 @@ class GpsImuNode(Node):
         )  # open serial port
         while True:
             try:
-                raw_data = ser.readline().decode()#read data
-                data = pynmea2.parse(raw_data)#parse data
+                raw_data = ser.readline().decode()  # Чтение строки данных
+                data = pynmea2.parse(raw_data)  # Разбор строки в формате NMEA
                 
-                #match input nmea packet
+                # Обработка только GGA сообщений, содержащих информацию о местоположении
                 if data.sentence_type == "GGA":
                     nav = NavSatFix()
+                    # Заполнение сообщения данными широты и долготы
                     nav.latitude = data.latitude
                     nav.longitude = data.longitude
                     self.nav_.publish(nav)
