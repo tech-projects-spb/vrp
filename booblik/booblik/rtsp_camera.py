@@ -46,8 +46,8 @@ class CameraNode(Node):
     def _readLoop(self):
         """Чтение и публикация данных с камеры"""
         link = f"rtspsrc location=rtsp://\
-            {self.config.login}:{self.config.password}@{self.config.ip}:{self.config.port}\
-            /ISAPI/Streaming/Channels/102 latency=50 ! decodebin ! videoconvert ! appsink"
+{self.config.login}:{self.config.password}@{self.config.ip}:{self.config.port}\
+/ISAPI/Streaming/Channels/102 latency=50 ! decodebin ! videoconvert ! appsink"
         
         # Инициализация захвата видео с использованием GStreamer
         cap = cv2.VideoCapture(link, cv2.CAP_GSTREAMER)
@@ -56,14 +56,14 @@ class CameraNode(Node):
             ok, img = cap.read()  # Чтение кадра
             if ok:
                 self._push_image(img)  # Публикация кадра, если чтение прошло успешно
-                self._save_image(img)   # Сохранение кадра
+                # self._save_image(img)   # Сохранение кадра
             else:
                 print('Ошибка чтения')
                 continue
 
     def _push_image(self, img: np.ndarray):
         """Конвертация и публикация изображения в ROS топик."""
-        ros2_img = self.cv_bridge.cv2_to_imgmsg(cvim=img, encoding='passthrough')
+        ros2_img = self.cv_bridge.cv2_to_imgmsg(cvim=img, encoding='bgr8')
         self.camera_.publish(ros2_img)  # Публикация изображения
     
     def _save_image(self, img: np.ndarray):
