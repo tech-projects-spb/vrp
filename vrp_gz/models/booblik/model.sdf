@@ -231,6 +231,7 @@
 				</limit>
 				<dynamics>
 					<friction>0.050000000000000003</friction>
+					<damping>0.050000000000000003</damping>
 				</dynamics>
 			</axis>
 		</joint>
@@ -288,6 +289,7 @@
 				</limit>
 				<dynamics>
 					<friction>0.050000000000000003</friction>
+					<damping>0.050000000000000003</damping>
 				</dynamics>
 			</axis>
 		</joint>
@@ -345,6 +347,7 @@
 				</limit>
 				<dynamics>
 					<friction>0.050000000000000003</friction>
+					<damping>0.050000000000000003</damping>
 				</dynamics>
 			</axis>
 		</joint>
