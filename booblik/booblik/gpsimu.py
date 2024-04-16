@@ -43,8 +43,7 @@ def parseLanLon(packet: bytearray):
     s = struct.unpack(format_latlon, packet)
     # Преобразование координат в десятичный формат
     lon = s[2]//1e7 + (s[2] % 1e7)/1e5/60 
-    lat = s[3]//1e7 + (s[3] % 1e7)/1e5/60 
-    print(lat, lon)
+    lat = s[3]//1e7 + (s[3] % 1e7)/1e5/60
     return lat, lon
 
 
@@ -121,7 +120,7 @@ class GpsImuNode(Node):
 
     def __init__(self, name='gpsimu'):
         super().__init__(name)
-        self.config = GpsConfig('/dev/serial0', 9600)  # Конфигурация порта
+        self.config = GpsConfig('/dev/ttyUSB0', 9600)  # Конфигурация порта
         # Создание издателей для GPS и IMU
         self.nav_ = self.create_publisher(
             NavSatFix,
@@ -153,11 +152,11 @@ class GpsImuNode(Node):
         
         self.lat, self.lon = 0,0
         
-        self.wx, self.wy, self.wz = 0,0,0
-        self.ax, self.ay, self.az = 0,0,0
-        self.qx, self.qy, self.qz, self.qw = 0,0,0,0
-        self.satellites, self.local_acc, self.horizontal__acc, self.vertical_acc = 0,0,0,0
-        self.altitude, self.angular_velocity, self.ground_speed = 0,0,0
+        self.wx, self.wy, self.wz = 0.,0.,0.
+        self.ax, self.ay, self.az = 0.,0.,0.
+        self.qx, self.qy, self.qz, self.qw = 0.,0.,0.,0.
+        self.satellites, self.local_acc, self.horizontal__acc, self.vertical_acc = 0.,0.,0.,0.
+        self.altitude, self.angular_velocity, self.ground_speed = 0.,0.,0.
 
         Thread(target=self._readLoop, daemon=True).start()  # Запуск чтения данных в отдельном потоке
 
@@ -181,24 +180,25 @@ class GpsImuNode(Node):
 
     def parsePacket(self, packet: bytearray):
         """Разбор пакета данных и публикация сообщений."""
-        if packet[1] == PacketID.Orientation:  # Если пакет содержит данные кватернионов
+        print
+        if packet[1] == PacketID.Orientation.value:  # Если пакет содержит данные кватернионов
             self.qx, self.qy, self.qz, self.qw = parseQuat(packet)  # Разбор данных кватернионов
             self.imu_process()
             self.odometry_process()
-        elif packet[1] == PacketID.AngularVelocity:  
+        elif packet[1] == PacketID.AngularVelocity.value:  
             self.wx, self.wy, self.wz, _ = parseAngleVelocities(packet) 
             self.imu_process()
-        elif packet[1] == PacketID.Acceleration:  
+        elif packet[1] == PacketID.Acceleration.value:  
             self.ax, self.ay, self.az, _ = parseAcceleration(packet) 
             self.imu_process()
-        elif packet[1] == PacketID.GPSCoordinates:  # Если пакет содержит данные о широте и долготе
+        elif packet[1] == PacketID.GPSCoordinates.value:  # Если пакет содержит данные о широте и долготе
             self.lat, self.lon = parseLanLon(packet)  # Разбор данных о широте и долготе
             self.navsatfix_process()
-        elif packet[1] == PacketID.GPSAccuracy: 
+        elif packet[1] == PacketID.GPSAccuracy.value: 
             self.satellites, self.local_acc, self.horizontal__acc, self.vertical_acc = parseGpsAccuracy(packet)
-            self.navsatfix_process()
             self.accuracy_process()
-        elif packet[1] == PacketID.GPSGroundSpeed:
+            self.satellites_process()
+        elif packet[1] == PacketID.GPSGroundSpeed.value:
             self.altitude, self.angular_velocity, self.ground_speed = parseGpsAccuracy(packet) 
             self.odometry_process()
             
@@ -221,7 +221,8 @@ class GpsImuNode(Node):
         msg.pose.pose.orientation.y = self.qy
         msg.pose.pose.orientation.z = self.qz
         msg.pose.pose.orientation.w = self.qw
-    
+        self.odometry_.publish(msg)
+        
     def satellites_process(self):
         msg = Float32()
         msg.data = self.satellites
@@ -232,11 +233,12 @@ class GpsImuNode(Node):
         msg.x = self.local_acc
         msg.y = self.horizontal__acc
         msg.z = self.vertical_acc
-        self.satellites_.publish(msg)  # Публикация сообщения
+        self.accuracy_.publish(msg)  # Публикация сообщения
     
     # Публикация данных ориентации
     def imu_process(self):
         imu = Imu()  # Создание сообщения IMU
+        print('heloo')
         # Заполнение данных ориентации
         imu.angular_velocity.x = math.radians(self.wx)
         imu.angular_velocity.y = math.radians(self.wy)
@@ -250,6 +252,7 @@ class GpsImuNode(Node):
         imu.orientation.y = self.qy
         imu.orientation.z = self.qz
         imu.orientation.w = self.qw
+        print(imu)
         self.imu_.publish(imu)  # Публикация сообщения
     
     
