@@ -184,6 +184,7 @@ class GpsImuNode(Node):
         if packet[1] == PacketID.Orientation:  # Если пакет содержит данные кватернионов
             self.qx, self.qy, self.qz, self.qw = parseQuat(packet)  # Разбор данных кватернионов
             self.imu_process()
+            self.odometry_process()
         elif packet[1] == PacketID.AngularVelocity:  
             self.wx, self.wy, self.wz, _ = parseAngleVelocities(packet) 
             self.imu_process()
