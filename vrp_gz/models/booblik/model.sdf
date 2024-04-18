@@ -415,5 +415,14 @@
 			<min_thrust_cmd>-20</min_thrust_cmd>
 			<topic>thrusters/back/thrust</topic>
 		</plugin>
+		<plugin
+      filename="gz-sim-odometry-publisher-system"
+      name="gz::sim::systems::OdometryPublisher">
+      <dimensions>3</dimensions>
+      <odom_publish_frequency>10.0</odom_publish_frequency>
+      <odom_frame>map</odom_frame>
+      <odom_topic>booblik/odometry</odom_topic>
+      <robot_base_frame>booblik/base_link</robot_base_frame>
+     </plugin>
 	</model>
 </sdf>
