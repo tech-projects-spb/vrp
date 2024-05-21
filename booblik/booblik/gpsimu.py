@@ -12,16 +12,16 @@ from geometry_msgs.msg import Vector3
 from std_msgs.msg import UInt32, Float32
 
 class PacketID(Enum):
-    RTC = 0x50, #< Real-Time-Clock: Year from 2000, Month, Day, Hour, Minute, Second (8-bit unsigned integers) + Millisecond (16-bit unsigned integer), representing time passed since last time set up in the \ref ridTimeYearMonth, \ref ridTimeDayHour, \ref ridTimeMinuteSecond and \ref ridTimeMilliseconds registers
-    Acceleration = 0x51, #< Linear accelerations + temperature/reserved field [X-Y-Z] (16-bit binary normalized quasi-floats)
-    AngularVelocity = 0x52, #< Angular velocities + temperature/reserved field [Roll-Pitch-Yaw] (16-bit binary normalized quasi-floats)
-    Angles = 0x53, #< Euler angles + temperature/reserved field [Roll-Pitch-Yaw] (16-bit binary normalized quasi-floats)
-    Magnetometer = 0x54, # Magnetic field tensity + temperature/reserved field [world X-Y-Z] (16-bit binary normalized quasi-floats)
-    DataPortStatus = 0x55, # Data port status packet, vendor-defined value
-    Altimeter = 0x56, # Altimeter + Barometer output (32-bit binary normalized quasi-floats)
-    GPSCoordinates = 0x57, # GPS: longitude + latitude, if supported by hardware (32-bit binary normalized quasi-floats)
-    GPSGroundSpeed = 0x58, # GPS: ground speed (32-bit binary normalized quasi-float) + altitude + angular velocity around vertical axis (16-bit binary normalized quasi-floats), if supported by hardware
-    Orientation = 0x59, # Orientation defined as quaternion [X-Y-Z-W], when available from the sensor firmware (16-bit binary normalized quasi-floats)
+    RTC = 0x50 #< Real-Time-Clock: Year from 2000, Month, Day, Hour, Minute, Second (8-bit unsigned integers) + Millisecond (16-bit unsigned integer), representing time passed since last time set up in the \ref ridTimeYearMonth, \ref ridTimeDayHour, \ref ridTimeMinuteSecond and \ref ridTimeMilliseconds registers
+    Acceleration = 0x51 #< Linear accelerations + temperature/reserved field [X-Y-Z] (16-bit binary normalized quasi-floats)
+    AngularVelocity = 0x52 #< Angular velocities + temperature/reserved field [Roll-Pitch-Yaw] (16-bit binary normalized quasi-floats)
+    Angles = 0x53 #< Euler angles + temperature/reserved field [Roll-Pitch-Yaw] (16-bit binary normalized quasi-floats)
+    Magnetometer = 0x54 # Magnetic field tensity + temperature/reserved field [world X-Y-Z] (16-bit binary normalized quasi-floats)
+    DataPortStatus = 0x55 # Data port status packet, vendor-defined value
+    Altimeter = 0x56 # Altimeter + Barometer output (32-bit binary normalized quasi-floats)
+    GPSCoordinates = 0x57 # GPS: longitude + latitude, if supported by hardware (32-bit binary normalized quasi-floats)
+    GPSGroundSpeed = 0x58 # GPS: ground speed (32-bit binary normalized quasi-float) + altitude + angular velocity around vertical axis (16-bit binary normalized quasi-floats), if supported by hardware
+    Orientation = 0x59 # Orientation defined as quaternion [X-Y-Z-W], when available from the sensor firmware (16-bit binary normalized quasi-floats)
     GPSAccuracy = 0x5A # GPS: visible satellites + variance vector [East-North-Up] (16-bit binary normalized quasi-floats)
 
 
@@ -120,7 +120,7 @@ class GpsImuNode(Node):
 
     def __init__(self, name='gpsimu'):
         super().__init__(name)
-        self.config = GpsConfig('/dev/ttyUSB0', 9600)  # Конфигурация порта
+        self.config = GpsConfig('/dev/serial0', 9600)  # Конфигурация порта
         # Создание издателей для GPS и IMU
         self.nav_ = self.create_publisher(
             NavSatFix,
@@ -199,7 +199,7 @@ class GpsImuNode(Node):
             self.accuracy_process()
             self.satellites_process()
         elif packet[1] == PacketID.GPSGroundSpeed.value:
-            self.altitude, self.angular_velocity, self.ground_speed = parseGpsAccuracy(packet) 
+            self.altitude, self.angular_velocity, self.ground_speed = parseGpsGroundSpeed(packet) 
             self.odometry_process()
             
 
@@ -224,7 +224,7 @@ class GpsImuNode(Node):
         self.odometry_.publish(msg)
         
     def satellites_process(self):
-        msg = Float32()
+        msg = UInt32()
         msg.data = self.satellites
         self.satellites_.publish(msg)  # Публикация сообщения
     
