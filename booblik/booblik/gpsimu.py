@@ -11,6 +11,9 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import UInt32, Float32
 
+import logging
+DEBUG = True
+
 class PacketID(Enum):
     RTC = 0x50 #< Real-Time-Clock: Year from 2000, Month, Day, Hour, Minute, Second (8-bit unsigned integers) + Millisecond (16-bit unsigned integer), representing time passed since last time set up in the \ref ridTimeYearMonth, \ref ridTimeDayHour, \ref ridTimeMinuteSecond and \ref ridTimeMilliseconds registers
     Acceleration = 0x51 #< Linear accelerations + temperature/reserved field [X-Y-Z] (16-bit binary normalized quasi-floats)
@@ -61,10 +64,10 @@ def parseQuat(packet: bytearray):
     """Разбор пакета данных с кватернионами ориентации."""
     s = struct.unpack(format_angle, packet)
     # Преобразование значений кватернионов
-    qx = s[2] / 32768
-    qy = s[3] / 32768
-    qz = s[4] / 32768
-    qw = s[5] / 32768
+    qx = s[3] / 32768
+    qy = s[4] / 32768
+    qz = s[5] / 32768
+    qw = s[2] / 32768
     return qx, qy, qz, qw
 
 def parseAngleVelocities(packet: bytearray):
@@ -158,6 +161,15 @@ class GpsImuNode(Node):
         self.satellites, self.local_acc, self.horizontal__acc, self.vertical_acc = 0.,0.,0.,0.
         self.altitude, self.angular_velocity, self.ground_speed = 0.,0.,0.
 
+        self.logger = logging.getLogger('GPSImu')
+        logFormatter = logging.Formatter("%(asctime)s [%(name)-8.8s] [%(levelname)-5.5s] %(message)s")
+        consoleHandler = logging.StreamHandler()
+        consoleHandler.setFormatter(logFormatter)
+        logging.basicConfig(
+            level=logging.DEBUG if DEBUG else logging.INFO,
+            handlers=[consoleHandler]
+        )
+
         Thread(target=self._readLoop, daemon=True).start()  # Запуск чтения данных в отдельном потоке
 
     def _readLoop(self):
@@ -183,23 +195,29 @@ class GpsImuNode(Node):
         print
         if packet[1] == PacketID.Orientation.value:  # Если пакет содержит данные кватернионов
             self.qx, self.qy, self.qz, self.qw = parseQuat(packet)  # Разбор данных кватернионов
+            self.logger.debug(f'Parsing Quaternions: {self.qx=}\t{self.qy=}\t{self.qz=}\t{self.qw=}')           
             self.imu_process()
             self.odometry_process()
         elif packet[1] == PacketID.AngularVelocity.value:  
             self.wx, self.wy, self.wz, _ = parseAngleVelocities(packet) 
+            self.logger.debug(f'Parsing AngularVelocities: {self.wx=}\t{self.wy=}\t{self.wz=}')
             self.imu_process()
         elif packet[1] == PacketID.Acceleration.value:  
             self.ax, self.ay, self.az, _ = parseAcceleration(packet) 
+            self.logger.debug(f'Parsing Acceleration: {self.ax=}\t{self.ay=}\t{self.az=}')
             self.imu_process()
         elif packet[1] == PacketID.GPSCoordinates.value:  # Если пакет содержит данные о широте и долготе
             self.lat, self.lon = parseLanLon(packet)  # Разбор данных о широте и долготе
+            self.logger.debug(f'Parsing GPSCoordinates: {self.lat=}\t{self.lon=}')
             self.navsatfix_process()
         elif packet[1] == PacketID.GPSAccuracy.value: 
             self.satellites, self.local_acc, self.horizontal__acc, self.vertical_acc = parseGpsAccuracy(packet)
+            self.logger.debug(f'Parsing GPSAccuracy: {self.satellites=}\t{self.local_acc=}\t{self.horizontal__acc=}\t{self.vertical_acc=}')
             self.accuracy_process()
             self.satellites_process()
         elif packet[1] == PacketID.GPSGroundSpeed.value:
             self.altitude, self.angular_velocity, self.ground_speed = parseGpsGroundSpeed(packet) 
+            self.logger.debug(f'Parsing Acceleration: {self.altitude=}\t{self.angular_velocity=}\t{self.ground_speed=}\n')
             self.odometry_process()
             
 
@@ -238,7 +256,6 @@ class GpsImuNode(Node):
     # Публикация данных ориентации
     def imu_process(self):
         imu = Imu()  # Создание сообщения IMU
-        print('heloo')
         # Заполнение данных ориентации
         imu.angular_velocity.x = math.radians(self.wx)
         imu.angular_velocity.y = math.radians(self.wy)
@@ -252,7 +269,6 @@ class GpsImuNode(Node):
         imu.orientation.y = self.qy
         imu.orientation.z = self.qz
         imu.orientation.w = self.qw
-        print(imu)
         self.imu_.publish(imu)  # Публикация сообщения
     
     
