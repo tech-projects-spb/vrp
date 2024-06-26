@@ -106,6 +106,15 @@ def magnetometer(world_name, model_name, link_name, sensor_name):
         ros_type='sensor_msgs/msg/MagneticField',
         direction=BridgeDirection.GZ_TO_ROS)
 
+def odometry(model_name):
+    ros_sensor_prefix = ros_prefix('', 'position')
+    return Bridge(
+        gz_topic=f'/{model_name}/odometry',
+        ros_topic=f'{ros_sensor_prefix}ground_truth_odometry',
+        gz_type='ignition.msgs.Odometry',
+        ros_type='nav_msgs/msg/Odometry',
+        direction=BridgeDirection.GZ_TO_ROS)
+
 def payload_bridges(world_name, model_name, link_name, sensor_name, sensor_type):
     bridges = []
     if sensor_type == sdf.Sensortype.CAMERA:
@@ -129,6 +138,10 @@ def payload_bridges(world_name, model_name, link_name, sensor_name, sensor_type)
     elif sensor_type == sdf.Sensortype.MAGNETOMETER:
         bridges = [
             magnetometer(world_name, model_name, link_name, sensor_name),
+        ]
+    elif 'OdometryPublisher' in sensor_name:
+        bridges = [
+            odometry(model_name),
         ]
 
     return bridges
