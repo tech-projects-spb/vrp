@@ -59,20 +59,22 @@ class QMC5883LNode(Node):
 
     def _readLoop(self):
         """Поток для непрерывного чтения и публикации данных с магнитометра."""
-        imu = Imu()
         while True:
             time.sleep(0.1)  # Ограничение частоты чтения
             try:
                 # Получение азимутального угла от магнитометра 
-                bearing = self.sensor.get_bearing()
+                bearing = self.sensor.get_bearing()                
                 print('Bearing', bearing)
 
+                # NOTE это нужно, чтобы в pypilot отображалось правильно
+                bearing = math.degrees(math.pi/ 2) - bearing
+
                 # Преобразование азимута в кватернион
-                qw, qx, qy, qz = euler_to_quaternion(degrees_to_radians(bearing), 0, 0)
+                qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
                 self.publishQuats((qw, qx, qy, qz))
                 
-            except:
-                print("Except: Reques error")
+            except Exception as e:
+                print("Except: Reques error: ", e)
     
     def publishQuats(self, quats):
         qw, qx, qy, qz = quats

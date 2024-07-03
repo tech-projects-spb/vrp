@@ -2,13 +2,19 @@ from dataclasses import dataclass
 import serial
 from threading import Thread
 import rclpy
+import time
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix  # Тип сообщения ROS для данных о местоположении
 from nav_msgs.msg import Odometry
 from std_msgs.msg import UInt32
 import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS
 
-from .QMC5883L import QMC5883LNode
+compas_imported = False
+try:
+    from .QMC5883L import QMC5883LNode
+    compas_imported = True
+except ImportError as ie:
+    print('Cannot import compas node: ', ie)
 
 def kmph_2_mps(kmph):
     return kmph * 3.6
@@ -77,23 +83,20 @@ class GpsImuNode(Node):
             timeout=3
         )  # open serial port
         while True:
+            time.sleep(0.1)
             try:
                 raw_data = ser.readline().decode()  # Чтение строки данных
-                print(raw_data)
                 data = pynmea2.parse(raw_data)  # Разбор строки в формате NMEA
                 if data.sentence_type in parse_sentence:
                     results = parse_sentence[data.sentence_type](data)
                     self.data.update(results)
-            except NotImplementedError:
-                pass
-                # print('Парсинг `{0}` не реализован'.format(data.sentence_type))
             except Exception as e:
                 pass
-                # print('Exception: ', e)
+                print('Exception: ', e)
             self.publishData()
     
     def publishData(self):
-        #print(self.data)
+        print(self.data)
         self.publishOdometry()
         self.publishNavSatFix()
         self.publishSallelites()
@@ -103,11 +106,6 @@ class GpsImuNode(Node):
         
         # msg.twist.twist.angular.z = self.angular_velocity
         msg.twist.twist.linear.x = self.data['ground_speed']
-        
-        # msg.pose.pose.orientation.x = self.qx
-        # msg.pose.pose.orientation.y = self.qy
-        # msg.pose.pose.orientation.z = self.qz
-        # msg.pose.pose.orientation.w = self.qw
         self.odometry_.publish(msg)
     
     def publishNavSatFix(self):
@@ -128,7 +126,8 @@ def main(args=None):
     rclpy.init(args=args)
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(GpsImuNode())
-    #executor.add_node(QMC5883LNode())
+    if compas_imported:
+        executor.add_node(QMC5883LNode())
     executor.spin()
     executor.shutdown()
     rclpy.shutdown()
