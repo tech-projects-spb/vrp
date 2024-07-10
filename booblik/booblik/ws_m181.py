@@ -3,6 +3,7 @@ import serial
 from threading import Thread
 import rclpy
 import time
+import argparse
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix  # Тип сообщения ROS для данных о местоположении
 from nav_msgs.msg import Odometry
@@ -121,12 +122,16 @@ class GpsImuNode(Node):
         msg.data = int(self.data['satellites'])
         self.satellites_.publish(msg)
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--use-compas', action='store_true')
+    return parser.parse_args()
 
 def main(args=None):
-    rclpy.init(args=args)
+    rclpy.init(args=None)
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(GpsImuNode())
-    if compas_imported:
+    if args.use_compas:
         executor.add_node(QMC5883LNode())
     executor.spin()
     executor.shutdown()
@@ -135,4 +140,4 @@ def main(args=None):
 
 
 if __name__ == '__main__':
-    main()
+    main(parse_args())
