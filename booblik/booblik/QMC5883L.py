@@ -30,6 +30,7 @@ def euler_to_quaternion(yaw, pitch, roll):
 class QMC5883LNode(Node):
     def __init__(self, name='QMC5883L'):
         super().__init__(name)
+        self.last_bearing = None
         # Запуск потока для чтения данных с магнитометра
         Thread(target=self._readLoop, daemon=True).start()
         while 1:
@@ -66,12 +67,20 @@ class QMC5883LNode(Node):
                 bearing = self.sensor.get_bearing()                
                 print('Bearing', bearing)
 
+                # NOTE пытаемся исключить момент, когда у нас не приходит беринг
+                # Наблюдается получение bearing=0
+                if self.last_bearing != None:
+                    value = ((bearing - self.last_bearing) / (self.last_bearing + 1e-5))
+                    if abs(value - 1) < 1e-4:
+                        continue 
+
                 # NOTE это нужно, чтобы в pypilot отображалось правильно
                 bearing = math.degrees(math.pi/ 2) - bearing
 
                 # Преобразование азимута в кватернион
                 qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
                 self.publishQuats((qw, qx, qy, qz))
+                self.last_bearing = bearing
                 
             except Exception as e:
                 print("Except: Reques error: ", e)
