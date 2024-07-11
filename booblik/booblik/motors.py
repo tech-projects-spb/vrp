@@ -6,6 +6,7 @@ import rclpy  # Импортируем библиотеку ROS2 для Python
 from rclpy.node import Node
 from std_msgs.msg import Float64
 
+MAX_THRUST = 10
 
 @dataclass #декоратор
 class MotorConfig:
@@ -131,6 +132,7 @@ class MotorsNode(Node):
 
     def updateThrust(self, motor: str, value: float):
         """Обновление тяги и отправка значений в драйвер."""
+        value = min(MAX_THRUST, max(-MAX_THRUST, value))
         setattr(self, motor, value / 20.0)  # Преобразование значения тяги
         self.send_thrust()  # Отправка обновлённых значений тяги в драйвер
 
