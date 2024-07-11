@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import serial
-from threading import Thread
+from threading import Thread, Lock
 import rclpy
 import time
 import argparse
@@ -72,29 +72,45 @@ class GpsImuNode(Node):
             UInt32,
             '/booblik/sensors/gps/satellites',
             10)
+        self.serial_lock = Lock()
+        self.serial = None
+        Thread(target=self._updateLoop, daemon=True).start()
         Thread(target=self._readLoop, daemon=True).start()  # ЗЗапуск отдельного потока для чтения данных с GPS
+        
 
+    def _updateLoop(self):
+        while True:
+            with self.serial_lock:
+                del(self.serial)
+                self.serial = serial.Serial(
+                self.config.port,
+                self.config.baudrate,
+                timeout=3
+                )  # open serial port
+            time.sleep(2)
 
     def _readLoop(self):
         """Цикл для чтения данных с GPS и их публикации."""
         # Инициализация подключения к GPS через последовательный порт
-        ser = serial.Serial(
-            self.config.port,
-            self.config.baudrate,
-            timeout=3
-        )  # open serial port
+        # ser = serial.Serial(
+        #     self.config.port,
+        #     self.config.baudrate,
+        #     timeout=3
+        # )  # open serial port
         while True:
             time.sleep(0.1)
-            try:
-                raw_data = ser.readline().decode()  # Чтение строки данных
-                data = pynmea2.parse(raw_data)  # Разбор строки в формате NMEA
-                if data.sentence_type in parse_sentence:
-                    results = parse_sentence[data.sentence_type](data)
-                    self.data.update(results)
-            except Exception as e:
-                pass
-                print('Exception: ', e)
-            self.publishData()
+            if self.serial == None: continue
+            with self.serial_lock:
+                try:
+                    raw_data = self.serial.readline().decode()  # Чтение строки данных
+                    data = pynmea2.parse(raw_data)  # Разбор строки в формате NMEA
+                    if data.sentence_type in parse_sentence:
+                        results = parse_sentence[data.sentence_type](data)
+                        self.data.update(results)
+                except Exception as e:
+                    pass
+                    print('Exception: ', e)
+                self.publishData()
     
     def publishData(self):
         print(self.data)
