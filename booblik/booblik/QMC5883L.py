@@ -40,7 +40,7 @@ class QMC5883LNode(Node):
                 # Загрузка калибровочных данных для магнитометра
                 #TODO read from config? 
                 self.sensor.calibration = [[1.0817261189833043, -0.06705906178799911, -485.7272567957916], 
-                      [-0.06705906178799906, 1.0550242422352802, -2953.8769005789645], 
+                      [0.06705906178799906, -1.0550242422352802, 2953.8769005789645], 
                       [0.0, 0.0, 1.0]]
                 break
             except:
@@ -65,7 +65,7 @@ class QMC5883LNode(Node):
             try:
                 # Получение азимутального угла от магнитометра 
                 bearing = self.sensor.get_bearing()                
-                print('Bearing', bearing)
+                # print('Bearing', bearing)
 
                 # NOTE пытаемся исключить момент, когда у нас не приходит беринг
                 # Наблюдается получение bearing=0
@@ -73,6 +73,7 @@ class QMC5883LNode(Node):
                     value = ((bearing - self.last_bearing) / (self.last_bearing + 1e-5))
                     if abs(value - 1) < 1e-4:
                         continue 
+                print('Bearing', bearing)
 
                 # NOTE это нужно, чтобы в pypilot отображалось правильно
                 bearing = math.degrees(math.pi/ 2) - bearing
