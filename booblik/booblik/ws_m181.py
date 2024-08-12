@@ -8,8 +8,10 @@ from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix  # Тип сообщения ROS для данных о местоположении
 from nav_msgs.msg import Odometry
 from std_msgs.msg import UInt32
-import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS
-from datetime import datetime
+import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS 
+
+import logging 
+DEBUG = True
 
 compas_imported = False
 try:
@@ -18,8 +20,19 @@ try:
 except ImportError as ie:
     print('Cannot import compas node: ', ie)
 
+# Настройка логгера
+logging.basicConfig(
+            level=logging.DEBUG if DEBUG else logging.info,
+            format='%(asctime)s [%(name)-8.8s] [%(levelname)-5.5s] %(message)s',
+            filename='gps_log.log',
+            filemode='a'
+        )
+
 def kmph_2_mps(kmph):
     return kmph / 3.6  # Конвертация км/ч в м/с
+
+def knot_2_mps(knots):
+    return knots * 0.514444  # Конвертация узлы в м/с
 
 @dataclass
 class GpsConfig:
@@ -37,26 +50,23 @@ class GpsImuNode(Node):
         self.longitude = None
         self.satellites = None
         self.ground_speed = None
-        self.data = {
-            'latitude': 0.0,
-            'longitude': 0.0,
-            'satellites': 0,
-            'ground_speed': 0.0,
-        }
         # Доступные `sentence_type`: GLL, GSV, GGA, GSA, VTG
         self.parse_sentence = {
-            "GGA": self.parseGGA,  
+            'GGA': self.parseGGA,  
             'VTG': self.parseVTG,
+            'RMC': self.parseRMC,
         }
         # Создание издателя для публикации данных о местоположении
         self.nav_ = self.create_publisher(NavSatFix, '/booblik/sensors/gps/navsat/fix', 10)
         self.odometry_ = self.create_publisher(Odometry, '/booblik/sensors/position/ground_truth_odometry', 10)
         self.satellites_ = self.create_publisher(UInt32, '/booblik/sensors/gps/satellites', 10)
+        
+        # 
         self.serial_lock = Lock()
         self.serial = None
         self.lock = Lock()
-        log_filename = f'/tmp/gps_data{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
-        self.log_file = open(log_filename, 'a')  # Открытие файла для записи данных
+        
+        self.logger = logging.getLogger('GPS') # Создание логгера для GPS данных
         
         Thread(target=self._updateLoop, daemon=True).start()  # Запуск потока для обновления соединения
         Thread(target=self._readLoop, daemon=True).start()  # Запуск потока для чтения данных с GPS
@@ -66,7 +76,7 @@ class GpsImuNode(Node):
         """Цикл для публикации данных."""
         while True:
             self.publishData()
-            time.sleep(0.1)
+            time.sleep(0.05)
 
     def _updateLoop(self):
         """Цикл для обновления соединения с GPS модулем."""
@@ -81,31 +91,29 @@ class GpsImuNode(Node):
     def _readLoop(self):
         """Цикл для чтения данных с GPS и их обработки."""
         while True:
-            time.sleep(0.1)
+            time.sleep(0.05)
             if self.serial is None:  # Проверяем, что объект последовательного порта существует и открыт
                 continue
             with self.serial_lock:
                 try:
-                    raw_data = self.serial.readline()
-                    self.log_file.write(f"Raw data: {raw_data}\n")  # Запись сырых данных в файл
-                    try:
-                        raw_data = raw_data.decode('utf-8')  # Чтение строки данных
-                    except UnicodeDecodeError as e:
-                        self.log_file.write(f"UnicodeDecodeError: {e}\n")
-                        continue  # Пропуск строки при ошибке декодирования
+                    raw_data = self.serial.readline() 
+                    self.logger.debug(f'Raw data: {raw_data}\n') # Запись сырых данных в лог
+                    raw_data = raw_data.decode('utf-8')  # Чтение строки данных
                     if not raw_data:  # Проверяет, что данные были успешно прочитаны из последовательного порта
                         continue  # Пропуск пустых строк
-                    try:
-                        data = pynmea2.parse(raw_data)  # Разбор строки в формате NMEA
-                        self.log_file.write(f"Parsed data: {data}\n")  # Запись разобранных данных в файл
-                        if data.sentence_type in self.parse_sentence:
-                            self.parse_sentence[data.sentence_type](data)
-                    except pynmea2.nmea.ParseError as e:
-                        self.log_file.write(f"NMEA ParseError: {e}\n")
-                        continue  # Пропуск строки при ошибке парсинга
+                    data = pynmea2.parse(raw_data)  # Разбор строки в формате NMEA
+                    self.logger.info(f'Parsed data: {data}\n') # Запись разобранных данных в файл
+                    if data.sentence_type in self.parse_sentence:
+                        self.parse_sentence[data.sentence_type](data)
                     self.serial.reset_input_buffer()  # Очистка буфера ввода
+                except UnicodeDecodeError as e: 
+                    self.logger.error(f'UnicodeDecodeError: {e}\n')
+                    continue  # Пропуск строки при ошибке декодирования
+                except pynmea2.nmea.ParseError as e:
+                    self.logger.error(f'NMEA ParseError: {e}\n') 
+                    continue  # Пропуск строки при ошибке парсинга
                 except Exception as e:
-                    self.log_file.write(f"Exception: {e}\n")
+                    self.logger.error(f'Exception: {e}\n') 
 
     def publishData(self):
         """Публикация данных."""
@@ -115,11 +123,6 @@ class GpsImuNode(Node):
                 self.publishOdometry()
                 self.publishNavSatFix()
                 self.publishSallelites()
-
-    def update_data(self, new_data: dict):
-        """Обновление данных."""
-        with self.lock:
-            self.data.update(new_data)
 
     def publishOdometry(self):
         """Публикация данных одометрии."""
@@ -154,6 +157,13 @@ class GpsImuNode(Node):
         """Обработка данных VTG."""
         with self.lock:
             self.ground_speed = kmph_2_mps(data.spd_over_grnd_kmph)
+
+    def parseRMC(self, data):
+        """Обработка данных RMC."""
+        with self.lock:
+            self.latitude = data.latitude
+            self.longitude = data.longitude
+            self.ground_speed = knot_2_mps(data.spd_over_grnd_kmph)   #Скорость в узлах
 
 def parse_args():
     parser = argparse.ArgumentParser()
