@@ -7,8 +7,9 @@ import argparse
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix  # Тип сообщения ROS для данных о местоположении
 from nav_msgs.msg import Odometry
-from std_msgs.msg import UInt32
+from std_msgs.msg import UInt32, Int16
 import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS 
+import geomag
 
 import logging 
 DEBUG = True
@@ -29,10 +30,16 @@ logging.basicConfig(
         )
 
 def kmph_2_mps(kmph):
-    return kmph / 3.6  # Конвертация км/ч в м/с
+    """Конвертация км/ч в м/с"""
+    return kmph / 3.6
 
 def knot_2_mps(knots):
-    return knots * 0.514444  # Конвертация узлы в м/с
+    """Конвертация узлы в м/с"""
+    return knots * 0.514444
+
+def declin_dir(mag_var, direction):
+    """Обработка направления магнитного склонения"""
+    return mag_var if direction == 'E' else -mag_var
 
 @dataclass
 class GpsConfig:
@@ -50,6 +57,7 @@ class GpsImuNode(Node):
         self.longitude = None
         self.satellites = None
         self.ground_speed = None
+        self.declination = None
         # Доступные `sentence_type`: GLL, GSV, GGA, GSA, VTG
         self.parse_sentence = {
             'GGA': self.parseGGA,  
@@ -60,6 +68,7 @@ class GpsImuNode(Node):
         self.nav_ = self.create_publisher(NavSatFix, '/booblik/sensors/gps/navsat/fix', 10)
         self.odometry_ = self.create_publisher(Odometry, '/booblik/sensors/position/ground_truth_odometry', 10)
         self.satellites_ = self.create_publisher(UInt32, '/booblik/sensors/gps/satellites', 10)
+        self.declination_ = self.create_publisher(UInt32, '/booblik/sensors/gps/navsat/declination', 10)
         
         # 
         self.serial_lock = Lock()
@@ -117,12 +126,13 @@ class GpsImuNode(Node):
 
     def publishData(self):
         """Публикация данных."""
-        print({attr: getattr(self, attr) for attr in ['latitude', 'longitude', 'satellites', 'ground_speed']})
-        with self.lock:
+        print({attr: getattr(self, attr) for attr in ['latitude', 'longitude', 'satellites', 'ground_speed', 'declination'] if getattr(self, attr) is not None})
+        with self.lock: # Захват блокировки для синхронизации доступа к данным перед публикацией
             if self.satellites is not None:
                 self.publishOdometry()
                 self.publishNavSatFix()
-                self.publishSallelites()
+                self.publishSatellites()
+                self.publishDeclination()
 
     def publishOdometry(self):
         """Публикация данных одометрии."""
@@ -139,31 +149,43 @@ class GpsImuNode(Node):
             nav.longitude = self.longitude
             self.nav_.publish(nav)
 
-    def publishSallelites(self):
+    def publishSatellites(self):
         """Публикация количества спутников."""
         msg = UInt32()
         if self.satellites is not None:
             msg.data = self.satellites
             self.satellites_.publish(msg)
+    
+    def publishDeclination(self):
+        """Публикация данных магнитного склонения"""
+        msg = Int16()
+        if self.declination is not None:
+            msg.data = self.declination
+        elif self.latitude is not None and self.longitude is not None: # Если нет данных, то посчитаем, используя координаты 
+            geomag_instance = geomag.GeoMag()
+            msg.data = round(geomag_instance.GeoMag(self.latitude, self.longitude, 0).dec) # Возвращает только значения склонения
+        self.declination_.publish(msg)
 
     def parseGGA(self, data):
         """Обработка данных GGA."""
-        with self.lock:
+        with self.lock: # Захват блокировки для безопасного доступа к разделяемым данным
             self.latitude = data.latitude
             self.longitude = data.longitude
             self.satellites = int(data.num_sats)
 
     def parseVTG(self, data):
         """Обработка данных VTG."""
-        with self.lock:
+        with self.lock: # Захват блокировки для безопасного доступа к разделяемым данным
             self.ground_speed = kmph_2_mps(data.spd_over_grnd_kmph)
 
     def parseRMC(self, data):
         """Обработка данных RMC."""
-        with self.lock:
+        with self.lock: # Захват блокировки для безопасного доступа к разделяемым данным
             self.latitude = data.latitude
             self.longitude = data.longitude
             self.ground_speed = knot_2_mps(data.spd_over_grnd_kmph)   #Скорость в узлах
+            self.declination = declin_dir(data.mag_variation, data.mag_var_dir)
+                
 
 def parse_args():
     parser = argparse.ArgumentParser()
