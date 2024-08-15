@@ -5,7 +5,7 @@ import time
 import raspy_qmc5883l  # Библиотека для работы с магнитометром QMC5883L
 from sensor_msgs.msg import Imu  # Стандартный тип сообщения ROS для данных IMU
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Int16
+from std_msgs.msg import Float64
 import math 
 
 import logging 
@@ -41,7 +41,7 @@ ZERO_THRESHOLD = 1e-2 # Определяем порог "близости к н�
 # Настройка логгера
 logging.basicConfig(
             level=logging.DEBUG if DEBUG else logging.info,
-            format='%(asctime)s [%(name)-8.8s] [%(levelname)-5.5s] %(message)s',
+            format='%(asctime)s [%(name)s] [%(levelname)-5.5s] %(message)s',
             filename='compas_log.log',
             filemode='a'
         )
@@ -50,7 +50,7 @@ class QMC5883LNode(Node):
     def __init__(self, name='QMC5883L'):
         super().__init__(name)
         self.last_bearing = None
-        self.declination = 0 # Для Петербурга ~ 12.0873° E 
+        self.declination = 12.0873 # Для Петербурга ~ 12.0873° E 
         self.logger = logging.getLogger('Compas') # Создание логгера для данных 
 
         while True:
@@ -77,7 +77,7 @@ class QMC5883LNode(Node):
             10)
         
         self.declination_ = self.create_subscription(
-            Int16,
+            Float64,
             '/booblik/sensors/gps/navsat/declination',
             self.declination_callback,
             10
@@ -91,7 +91,7 @@ class QMC5883LNode(Node):
 
                     
     def _readLoop(self):
-        """Поток для непрерывного чтения и публикации данных с магнитометра."""
+        """Поток для непрерывного чтения и публикации данных с магнитометра"""
         while True:
             time.sleep(0.1)  # Ограничение частоты чтения
             try:
@@ -113,7 +113,7 @@ class QMC5883LNode(Node):
                     corrected_bearing += 360
                                 
                 self.logger.info(f'Bearing: {bearing}, Declination: {self.declination}, Corrected bearing: {corrected_bearing}\n')
-                print(f'Bearing with declination: {corrected_bearing}, when declination is {self.declination}')
+                print(f'Bearing with declination: {corrected_bearing:.2f}, when declination is {self.declination:.2f}')
  
                 # # NOTE это нужно, чтобы в pypilot отображалось правильно
                 # bearing = math.degrees(math.pi/ 2) - bearing
