@@ -50,7 +50,7 @@ class QMC5883LNode(Node):
     def __init__(self, name='QMC5883L'):
         super().__init__(name)
         self.last_bearing = None
-        self.declination = 12.0873 # Для Петербурга ~ 12.0873° E 
+        self.declination = - 10.94 # Для Петербурга ~ 12.0873° E, Для Владивостока ~ 10.94° W на 16.08.2024
         self.logger = logging.getLogger('Compas') # Создание логгера для данных 
 
         while True:
