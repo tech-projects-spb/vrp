@@ -127,7 +127,7 @@ class QMC5883LNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    task = QMC5883LNode()
+    task = QMC5883LNode(location='Vladivostok')
     rclpy.spin(task)
     rclpy.shutdown()
 
