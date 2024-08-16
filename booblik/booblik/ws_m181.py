@@ -44,7 +44,7 @@ class GpsImuNode(Node):
 
     def __init__(self, name='ws_m181'):
         super().__init__(name)
-        self.config = GpsConfig('/dev/ttyUSB0', 115200)  # Настройки подключения к GPS
+        self.config = GpsConfig('/dev/serial0', 115200)  # Настройки подключения к GPS
         self.latitude = None
         self.longitude = None
         self.satellites = None

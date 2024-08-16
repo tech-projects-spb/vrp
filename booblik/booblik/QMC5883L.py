@@ -38,6 +38,12 @@ CALIBRATION_MATRIX = [[1.0817261189833043, -0.06705906178799911, -485.7272567957
 
 ZERO_THRESHOLD = 1e-2 # Определяем порог "близости к нулю" для избежания ошибок
 
+DECLINATIONS = { # Данные по магнитному склонению на 16.08.2024
+    'Obninsk' : 11.57,
+    'Saint-Petersburg' : 12.0873,
+    'Vladivostok' : -10.9382
+}
+
 # Настройка логгера
 logging.basicConfig(
             level=logging.DEBUG if DEBUG else logging.info,
@@ -47,10 +53,9 @@ logging.basicConfig(
         )
 
 class QMC5883LNode(Node):
-    def __init__(self, name='QMC5883L'):
+    def __init__(self, name='QMC5883L', location='Saint-Petersburg'):
         super().__init__(name)
-        self.last_bearing = None
-        self.declination = - 10.94 # Для Петербурга ~ 12.0873° E, Для Владивостока ~ 10.94° W на 16.08.2024
+        self.last_bearing = None 
         self.logger = logging.getLogger('Compas') # Создание логгера для данных 
 
         while True:
@@ -60,10 +65,14 @@ class QMC5883LNode(Node):
                 # Загрузка калибровочных данных для магнитометра
                 self.sensor.calibration = CALIBRATION_MATRIX
                 self.logger.info('Magnetometer initialized successfully.')
+                print(self.sensor.get_declination)
+                # Выбор магнитного склонения для инициализации в зависимости от местоположения
+                self.sensor.declination = DECLINATIONS.get(location, 0.0)
+                self.logger.info('Set declination successfully.')
                 break
             except Exception as e:
-                self.logger.error('Init Error: {e}\nRetrying initialization...')
-                print("Init Error. Retrying initialization...")
+                self.logger.error(f'Init Error: {e}\nRetrying initialization...')
+                print(f'Init Error: {e}\nRetrying initialization...')
                 time.sleep(0.1)
 
         # Создание издателя для публикации данных IMU        
@@ -87,7 +96,7 @@ class QMC5883LNode(Node):
         Thread(target=self._readLoop, daemon=True).start()
 
     def declination_callback(self, msg):
-        self.declination = msg.data
+        self.sensor.declination = msg.data
 
                     
     def _readLoop(self):
@@ -96,6 +105,7 @@ class QMC5883LNode(Node):
             time.sleep(0.1)  # Ограничение частоты чтения
             try:
                 # Получение азимутального угла от магнитометра 
+                
                 bearing = self.sensor.get_bearing()
                 if bearing == 0:
                     if self.last_bearing is not None and abs(self.last_bearing) > ZERO_THRESHOLD:
@@ -103,29 +113,21 @@ class QMC5883LNode(Node):
                         continue # Игнорируем данное значение, скорее всего ошибка
                     else:
                         self.logger.info('Bearing is 0, which seems consistent with previous readings')
-                
-
-                # Учет магнитного склонения
-                corrected_bearing = bearing + self.declination
-                if corrected_bearing > 360: 
-                    corrected_bearing -= 360
-                elif corrected_bearing < 0:
-                    corrected_bearing += 360
                                 
-                self.logger.info(f'Bearing: {bearing}, Declination: {self.declination}, Corrected bearing: {corrected_bearing}\n')
-                print(f'Bearing with declination: {corrected_bearing:.2f}, when declination is {self.declination:.2f}')
+                self.logger.info(f'Bearing: {bearing},  when declination is {self.sensor.declination}\n')
+                print(f'Bearing with declination: {bearing:.2f}, when declination is {self.sensor.declination:.2f}')
  
                 # # NOTE это нужно, чтобы в pypilot отображалось правильно
                 # bearing = math.degrees(math.pi/ 2) - bearing
 
                 # Преобразование азимута в кватернион
-                qw, qx, qy, qz = euler_to_quaternion(math.radians(corrected_bearing), 0, 0)
+                qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
                 self.publishQuats((qw, qx, qy, qz))
                 self.last_bearing = bearing
                 
             except Exception as e:
                 self.logger.error(f'Except: Reques error: {e}\n')
-                print("Except: Reques error: ", e)
+                print(f'Except: Reques error: {e}')
     
     def publishQuats(self, quats):
         qw, qx, qy, qz = quats
@@ -151,7 +153,7 @@ class QMC5883LNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    task = QMC5883LNode()
+    task = QMC5883LNode(location='Vladivostok')
     rclpy.spin(task)
     rclpy.shutdown()
 
