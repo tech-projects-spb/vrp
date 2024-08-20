@@ -4,16 +4,12 @@ from rclpy.node import Node
 import time
 import raspy_qmc5883l  # Библиотека для работы с магнитометром QMC5883L
 from sensor_msgs.msg import Imu  # Стандартный тип сообщения ROS для данных IMU
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float64
 import math 
 
 import logging 
 DEBUG = True
-
-def degrees_to_radians(degrees):
-    """Конвертация углов из градусов в радианы"""
-    return degrees * math.pi / 180
 
 def euler_to_quaternion(yaw, pitch, roll):
     """Преобразование углов Эйлера в кватернион для описания ориентации в пространстве"""
@@ -33,7 +29,7 @@ def euler_to_quaternion(yaw, pitch, roll):
 
 # Калибровочные данные для магнитометра
 CALIBRATION_MATRIX = [[1.0817261189833043, -0.06705906178799911, -485.7272567957916],
-                      [-0.06705906178799906, 1.0550242422352802, -2953.8769005789645],
+                      [0.06705906178799906, -1.0550242422352802, 2953.8769005789645],
                       [0.0, 0.0, 1.0]]
 
 ZERO_THRESHOLD = 1e-2 # Определяем порог "близости к нулю" для избежания ошибок
@@ -43,6 +39,8 @@ DECLINATIONS = { # Данные по магнитному склонению н�
     'Saint-Petersburg' : 12.0873,
     'Vladivostok' : -10.9382
 }
+
+# CONSTRUCTION_RED = 24 # поправка на конструкцию в CheeseCake
 
 # Настройка логгера
 logging.basicConfig(
@@ -75,14 +73,13 @@ class QMC5883LNode(Node):
                 print(f'Init Error: {e}\nRetrying initialization...')
                 time.sleep(0.1)
 
-        # Создание издателя для публикации данных IMU        
         self.imu_ = self.create_publisher(
             Imu,
-            '/booblik/sensors/imu/imu/data',
+            '/booblik/sensors/imu/imu/quaternions',
             10)
-        self.odometry_ = self.create_publisher(
-            Odometry,
-            '/booblik/sensors/position/ground_truth_odometry',
+        self.direction_ = self.create_publisher(
+            Vector3,
+            '/booblik/sensors/imu/imu/euler',
             10)
         
         self.declination_ = self.create_subscription(
@@ -117,12 +114,10 @@ class QMC5883LNode(Node):
                 self.logger.info(f'Bearing: {bearing},  when declination is {self.sensor.declination}\n')
                 print(f'Bearing with declination: {bearing:.2f}, when declination is {self.sensor.declination:.2f}')
  
-                # # NOTE это нужно, чтобы в pypilot отображалось правильно
-                # bearing = math.degrees(math.pi/ 2) - bearing
-
                 # Преобразование азимута в кватернион
                 qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
                 self.publishQuats((qw, qx, qy, qz))
+                self.publish_euler(math.radians(bearing), 0.0, 0.0)
                 self.last_bearing = bearing
                 
             except Exception as e:
@@ -131,16 +126,6 @@ class QMC5883LNode(Node):
     
     def publishQuats(self, quats):
         qw, qx, qy, qz = quats
-
-        # Формирование и публикация сообщения Odometry
-        odometry = Odometry()
-        # Заполнение данных ориентации
-        odometry.pose.pose.orientation.x = qx
-        odometry.pose.pose.orientation.y = qy
-        odometry.pose.pose.orientation.z = qz
-        odometry.pose.pose.orientation.w = qw
-        self.odometry_.publish(odometry)
-    
         # Формирование и публикация сообщения IMU
         imu = Imu() 
         # Заполнение данных ориентации
@@ -149,7 +134,14 @@ class QMC5883LNode(Node):
         imu.orientation.z = qz
         imu.orientation.w = qw
         self.imu_.publish(imu)
-
+    
+    def publish_euler(self, yaw, pitch, roll):
+        direction = Vector3()
+        # заполнение данных углов
+        direction.x = pitch
+        direction.y = yaw
+        direction.z = roll
+        self.direction_.publish(direction)
 
 def main(args=None):
     rclpy.init(args=args)
