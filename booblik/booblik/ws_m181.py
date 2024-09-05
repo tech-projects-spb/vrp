@@ -9,17 +9,12 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import UInt32, Float64
 import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS 
 from geomag.geomag import GeoMag
+import os
 
+from . import logging_config
 import logging 
 DEBUG = True 
 
-# Настройка логгера
-logging.basicConfig(
-            level=logging.DEBUG if DEBUG else logging.info,
-            format='%(asctime)s [%(name)s] [%(levelname)-5.5s] %(message)s',
-            filename='gps_log.log',
-            filemode='a'
-        )
 
 def kmph_2_mps(kmph):
     """Конвертация км/ч в м/с"""
@@ -45,6 +40,10 @@ class GpsImuNode(Node):
     def __init__(self, name='ws_m181'):
         super().__init__(name)
         self.config = GpsConfig('/dev/serial0', 115200)  # Настройки подключения к GPS
+
+        logging_config.setup_logging(log_filename='GPS')  # Настройка логгера с использованием имени ноды
+        self.logger = logging.getLogger('GPS') # Создание логгера для данных 
+
         self.latitude = None
         self.longitude = None
         self.satellites = None
