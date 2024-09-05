@@ -38,25 +38,16 @@ class MotorsTest(Node):
         self.left_coeff = 1.0
         self.right_coeff = 1.0
         self.start_yaw = None
-        self.time_straight = 0  # Время, в течение которого робот движется прямо
-
-        if self.mode == 'manual':
-            # В ручном режиме публикуем коэффициенты каждую секунду
-            self.timer = self.create_timer(1.0, self.publish_thrust)
-            # Запускаем поток для ввода данных от пользователя
-            input_thread = threading.Thread(target=self.manual_input_loop)
-            input_thread.daemon = True  # Поток завершится вместе с программой
-            input_thread.start()
-        elif self.mode == 'auto':
-            # В автоматическом режиме запускаем авто-цикл
-            self.timer = self.create_timer(1.0, self.auto_loop)
-        else:
-            self.logger.error(f"Неизвестный режим: {self.mode}. Используйте 'auto' или 'manual'.")
-            rclpy.shutdown()
+        self.time_straight = 0  # Время, в течение которого робот движется прямо 
 
         if self.mode == 'manual':
             # В ручном режиме запускаем цикл для ввода и публикации коэффициентов
-            self.manual_loop()
+            input_thread = threading.Thread(target=self.manual_input_loop)
+            input_thread.daemon = True
+            input_thread.start()
+
+            # Основной поток продолжает публиковать коэффициенты каждые 1 секунду
+            self.timer = self.create_timer(1.0, self.publish_loop)
         elif self.mode == 'auto':
             # В автоматическом режиме запускаем авто-цикл
             self.timer = self.create_timer(1.0, self.auto_loop)
@@ -67,6 +58,47 @@ class MotorsTest(Node):
     
     def yaw_callback(self, msg: Vector3):
         self.yaw = degrees(msg.y) 
+
+    def manual_input_loop(self):
+        '''Функция для запроса коэффициентов в ручном режиме'''
+        while True: 
+            user_input = input('Введите коэффициенты для левого и правого двигателя  от 0% до 100% (через пробел): ')
+            try:
+                # Обновляем коэффициенты для двигателей
+                self.left_coeff, self.right_coeff = [float(i)/100 for i in user_input.split()]
+
+                #Проверка, что коэффициенты в нужном диапазоне
+                if not (0 <= self.left_coeff <= 100 and 0 <= self.right_coeff <= 100):
+                    print('Коэффициенты должны быть в диапазоне от 0 до 100')
+                    continue
+                
+                self.logger.info(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
+                
+                # Публикуем значения
+                self.publish_thrust(self.left_coeff, 'left')
+                self.publish_thrust(self.right_coeff, 'right')
+
+            except ValueError:
+                self.logger.error('Неверный формат ввода! Введите два числа от 0 до 100, разделенные пробелом.')
+                print('Неверный формат ввода! Введите два числа от 1 до 100, разделенные пробелом.')
+
+    def auto_loop(self):
+        if self.start_yaw is None:
+            self.start_yaw = self.yaw # Инициализация начального направления
+        
+        # Публикация текущих коэффициентов
+        self.publish_thrust(self.left_coeff, 'left')
+        self.publish_thrust(self.right_coeff, 'right')
+
+        self.check_straight_moving(self.yaw - self.start_yaw)
+
+        self.check_moving_time()
+
+    def publish_loop(self):
+        '''Публикация коэффициентов на двигатели каждую секунду'''
+        self.publish_thrust(self.left_coeff, 'left')
+        self.publish_thrust(self.right_coeff, 'right')
+        self.logger.info(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
 
     def publish_thrust(self, coefficient: float, thrust: str):
         '''Универсальная функция публикации тяги'''
@@ -81,34 +113,8 @@ class MotorsTest(Node):
         else:
             self.logger.info(f'Неизвестный двигатель: {thrust}') 
 
-    def manual_loop(self):
-        '''Цикл для ручного режима, запрашивающий ввод и публикующий коэффициенты'''
-        while True:
-            # Запрос у пользователя коэффициентов для двигателей
-            user_input = input('Введите коэффициенты для левого и правого двигателя (через пробел): ')
-            try:
-                # Обновляем коэффициенты для двигателей
-                self.left_coeff, self.right_coeff = [float(i)/100 for i in user_input.split()]
-                self.logger.info(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
-                
-                # Публикуем значения
-                self.publish_thrust(self.left_coeff, 'left')
-                self.publish_thrust(self.right_coeff, 'right')
-
-            except ValueError:
-                self.logger.error("Неверный формат ввода! Введите два числа от 1 до 100, разделенные пробелом.")
-
-    def auto_loop(self):
-        if self.start_yaw is None:
-            self.start_yaw = self.yaw # Инициализация начального направления
-        
-        # Публикация текущих коэффициентов
-        self.publish_thrust(self.left_coeff, 'left')
-        self.publish_thrust(self.right_coeff, 'right')
-
-        # Проверка отклонения yaw и корректировка коэффициентов
-        yaw_diff = self.yaw - self.start_yaw
-
+    def check_straight_moving(self, yaw_diff):
+        '''Проверка отклонения yaw и корректировка коэффициентов'''
         if abs(yaw_diff) > DIFF:
             if yaw_diff > DIFF:
                 self.left_coeff -= 0.02
@@ -117,15 +123,16 @@ class MotorsTest(Node):
                 self.right_coeff -= 0.02
                 self.logger.info(f'Уход влево: уменьшение тяги правого двигателя до {self.left_coeff}')
             self.time_straight = 0 
+            self.start_yaw = self.yaw
         else:
             self.time_straight += 1
-            self.logger.info(f'Робот движется прямо при отклонении угла {yaw_diff}')
+            self.logger.info(f'Робот движется прямо при отклонении угла {yaw_diff}, время движения прямо {self.time_straight} секунд')        
 
-        # Проверка длительности движения
+    def check_moving_time(self):
+        '''Проверка длительности движения'''
         if abs(time.time() - self.get_clock().now().seconds_nanoseconds()[0]) > PERIOD:
             self.logger.info(f'Бублик успешно проехал 10 секунд. Завершаем тесты. Итоговые коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}')
-            rclpy.shutdown()
-              
+            rclpy.shutdown()          
 
 def main(args=None):
     rclpy.init(args=args)
@@ -133,7 +140,7 @@ def main(args=None):
     mode = input("Выберите режим работы ('auto' или 'manual'): ").strip().lower()
     task = MotorsTest(mode=mode)
     rclpy.spin(task)
-    rclpy.shutdown
+    rclpy.shutdown()
 
 
 if __name__ == '__main__':

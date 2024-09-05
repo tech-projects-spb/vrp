@@ -5,7 +5,7 @@ package_name = 'vrp_comp'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=[package_name, 'test'],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -25,7 +25,8 @@ setup(
             'first_task = vrp_comp.first_task:main',
             'second_task = vrp_comp.second_task:main',
             'third_task = vrp_comp.third_task:main',
-            'lidar_show = vrp_comp.lidar_show:main'
+            'lidar_show = vrp_comp.lidar_show:main',
+            'motors_test = test.motors_test:main'
         ],
     },
 )
