@@ -5,7 +5,7 @@ package_name = 'vrp_comp'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=[package_name, 'test'],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -31,6 +31,7 @@ setup(
             'tAdA = vrp_comp.tAdA:main',
             'vorsha = vrp_comp.vorsha:main'
             'seaphoenix = vrp_comp.seaphoenix:main'
+            'motors_test = test.motors_test:main'
         ],
     },
 )

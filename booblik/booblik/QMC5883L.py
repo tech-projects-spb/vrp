@@ -7,6 +7,7 @@ from sensor_msgs.msg import Imu  # Стандартный тип сообщен�
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float64
 import math 
+from . import logging_config
 
 import logging 
 DEBUG = True
@@ -32,52 +33,28 @@ CALIBRATION_MATRIX = [[1.0817261189833043, -0.06705906178799911, -485.7272567957
                       [0.06705906178799906, -1.0550242422352802, 2953.8769005789645],
                       [0.0, 0.0, 1.0]]
 
-ZERO_THRESHOLD = 1e-2 # Определяем порог "близости к нулю" для избежания ошибок
-
 DECLINATIONS = { # Данные по магнитному склонению на 16.08.2024
     'Obninsk' : 11.57,
     'Saint-Petersburg' : 12.0873,
     'Vladivostok' : -10.9382
 }
 
-# CONSTRUCTION_RED = 24 # поправка на конструкцию в CheeseCake
-
-# Настройка логгера
-logging.basicConfig(
-            level=logging.DEBUG if DEBUG else logging.info,
-            format='%(asctime)s [%(name)s] [%(levelname)-5.5s] %(message)s',
-            filename='compas_log.log',
-            filemode='a'
-        )
-
 class QMC5883LNode(Node):
     def __init__(self, name='QMC5883L', location='Saint-Petersburg'):
-        super().__init__(name)
-        self.last_bearing = None 
+        super().__init__(name) 
+        logging_config.setup_logging(log_filename='Compas')  # Настройка логгера с использованием имени ноды
         self.logger = logging.getLogger('Compas') # Создание логгера для данных 
 
-        while True:
-            try:
-                # Инициализация магнитометра
-                self.sensor = raspy_qmc5883l.QMC5883L()
-                # Загрузка калибровочных данных для магнитометра
-                self.sensor.calibration = CALIBRATION_MATRIX
-                self.logger.info('Magnetometer initialized successfully.')
-                print(self.sensor.get_declination)
-                # Выбор магнитного склонения для инициализации в зависимости от местоположения
-                self.sensor.declination = DECLINATIONS.get(location, 0.0)
-                self.logger.info('Set declination successfully.')
-                break
-            except Exception as e:
-                self.logger.error(f'Init Error: {e}\nRetrying initialization...')
-                print(f'Init Error: {e}\nRetrying initialization...')
-                time.sleep(0.1)
+        # self.declare_parameter('location', 'default_location')
+        # location = self.get_parameter('location').get_parameter_value().string_value
 
+        self.sensor = self.initialize_sensor(location)
+        
         self.imu_ = self.create_publisher(
             Imu,
             '/booblik/sensors/imu/imu/quaternions',
             10)
-        self.direction_ = self.create_publisher(
+        self.euler_ = self.create_publisher(
             Vector3,
             '/booblik/sensors/imu/imu/euler',
             10)
@@ -89,42 +66,47 @@ class QMC5883LNode(Node):
             10
         )
 
+        self.update_rate = 0.1  # Частота обновления данных в секундах
         # Запуск потока для чтения данных с магнитометра
         Thread(target=self._readLoop, daemon=True).start()
 
-    def declination_callback(self, msg):
-        self.sensor.declination = msg.data
+    def initialize_sensor(self, location):
+        """Инициализация магнитометра с помощью калибовочной матрицы"""
+        while True:
+            try:
+                sensor = raspy_qmc5883l.QMC5883L()
+                sensor.calibration = CALIBRATION_MATRIX
+                self.logger.info('Magnetometer initialized successfully.') 
+                # Выбор магнитного склонения для инициализации в зависимости от местоположения
+                sensor.declination = DECLINATIONS.get(location,'Saint-Petersburg')
+                self.logger.info('Declination set for {location}.')
+                return sensor
+            except Exception as e:
+                self.logger.error(f'Init Error: {e}\nRetrying initialization...')
+                time.sleep(0.5) 
 
-                    
+    def declination_callback(self, msg):
+        self.sensor.declination = msg.data  
+
     def _readLoop(self):
         """Поток для непрерывного чтения и публикации данных с магнитометра"""
         while True:
-            time.sleep(0.1)  # Ограничение частоты чтения
+            time.sleep(self.update_rate)  # Ограничение частоты чтения
             try:
                 # Получение азимутального угла от магнитометра 
-                
-                bearing = self.sensor.get_bearing()
-                if bearing == 0:
-                    if self.last_bearing is not None and abs(self.last_bearing) > ZERO_THRESHOLD:
-                        self.logger.warning('Unexpected 0 bearing detected, possibly a sensor error.')
-                        continue # Игнорируем данное значение, скорее всего ошибка
-                    else:
-                        self.logger.info('Bearing is 0, which seems consistent with previous readings')
-                                
+                bearing = self.sensor.get_bearing()                                
                 self.logger.info(f'Bearing: {bearing},  when declination is {self.sensor.declination}\n')
                 print(f'Bearing with declination: {bearing:.2f}, when declination is {self.sensor.declination:.2f}')
  
                 # Преобразование азимута в кватернион
                 qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
-                self.publishQuats((qw, qx, qy, qz))
+                self.publish_quaternion((qw, qx, qy, qz))
                 self.publish_euler(math.radians(bearing), 0.0, 0.0)
-                self.last_bearing = bearing
                 
             except Exception as e:
                 self.logger.error(f'Except: Reques error: {e}\n')
-                print(f'Except: Reques error: {e}')
-    
-    def publishQuats(self, quats):
+
+    def publish_quaternion(self, quats):
         qw, qx, qy, qz = quats
         # Формирование и публикация сообщения IMU
         imu = Imu() 
@@ -136,16 +118,16 @@ class QMC5883LNode(Node):
         self.imu_.publish(imu)
     
     def publish_euler(self, yaw, pitch, roll):
-        direction = Vector3()
+        euler = Vector3()
         # заполнение данных углов
-        direction.x = pitch
-        direction.y = yaw
-        direction.z = roll
-        self.direction_.publish(direction)
+        euler.x = pitch
+        euler.y = yaw
+        euler.z = roll
+        self.euler_.publish(euler)
 
 def main(args=None):
     rclpy.init(args=args)
-    task = QMC5883LNode(location='Vladivostok')
+    task = QMC5883LNode()
     rclpy.spin(task)
     rclpy.shutdown()
 
