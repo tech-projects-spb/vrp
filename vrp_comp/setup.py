@@ -25,7 +25,12 @@ setup(
             'first_task = vrp_comp.first_task:main',
             'second_task = vrp_comp.second_task:main',
             'third_task = vrp_comp.third_task:main',
-            'lidar_show = vrp_comp.lidar_show:main'
+            'lidar_show = vrp_comp.lidar_show:main',
+            'formula0 = vrp_comp.formula0:main',
+            'avior = vrp_comp.avior:main',
+            'tAdA = vrp_comp.tAdA:main',
+            'vorsha = vrp_comp.vorsha:main'
+            'seaphoenix = vrp_comp.seaphoenix:main'
         ],
     },
 )
