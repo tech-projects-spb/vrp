@@ -29,8 +29,9 @@ setup(
             'formula0 = vrp_comp.formula0:main',
             'avior = vrp_comp.avior:main',
             'tAdA = vrp_comp.tAdA:main',
-            'vorsha = vrp_comp.vorsha:main'
-            'seaphoenix = vrp_comp.seaphoenix:main'
+            'vorsha = vrp_comp.vorsha:main',
+            'seaphoenix = vrp_comp.seaphoenix:main',
+            'motors_test = test.motors_test:main' 
         ],
     },
 )

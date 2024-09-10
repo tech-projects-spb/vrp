@@ -8,25 +8,10 @@ from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float64
 import math 
 from . import logging_config
+from .utils import euler_to_quaternion
 
 import logging 
 DEBUG = True
-
-def euler_to_quaternion(yaw, pitch, roll):
-    """Преобразование углов Эйлера в кватернион для описания ориентации в пространстве"""
-    cy = math.cos(yaw * 0.5)
-    sy = math.sin(yaw * 0.5)
-    cp = math.cos(pitch * 0.5)
-    sp = math.sin(pitch * 0.5)
-    cr = math.cos(roll * 0.5)
-    sr = math.sin(roll * 0.5)
-
-    qw = cy * cp * cr + sy * sp * sr
-    qx = cy * cp * sr - sy * sp * cr
-    qy = sy * cp * sr + cy * sp * cr
-    qz = sy * cp * cr - cy * sp * sr
-
-    return qw, qx, qy, qz
 
 # Калибровочные данные для магнитометра
 CALIBRATION_MATRIX = [[1.0817261189833043, -0.06705906178799911, -485.7272567957916],

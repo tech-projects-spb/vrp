@@ -9,24 +9,11 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import UInt32, Float64
 import pynmea2  # Библиотека для разбора данных в формате NMEA, получаемых от GPS 
 from geomag.geomag import GeoMag
-import os
+from .utils import kmph_2_mps, knot_2_mps, declin_dir
 
 from . import logging_config
 import logging 
 DEBUG = True 
-
-
-def kmph_2_mps(kmph):
-    """Конвертация км/ч в м/с"""
-    return kmph / 3.6
-
-def knot_2_mps(knots):
-    """Конвертация узлы в м/с"""
-    return knots * 0.514444
-
-def declin_dir(mag_var, direction):
-    """Обработка направления магнитного склонения"""
-    return mag_var if direction == 'E' else -mag_var
 
 @dataclass
 class GpsConfig:

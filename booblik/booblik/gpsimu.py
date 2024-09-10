@@ -12,6 +12,7 @@ from geometry_msgs.msg import Vector3
 from std_msgs.msg import UInt32, Float32
 
 import logging
+from . import logging_config
 DEBUG = True
 
 class PacketID(Enum):
@@ -124,6 +125,10 @@ class GpsImuNode(Node):
     def __init__(self, name='gpsimu'):
         super().__init__(name)
         self.config = GpsConfig('/dev/serial0', 9600)  # Конфигурация порта
+
+        logging_config.setup_logging(log_filename='Compas')  # Настройка логгера с использованием имени ноды
+        self.logger = logging.getLogger('Compas') # Создание логгера для данных 
+
         # Создание издателей для GPS и IMU
         self.nav_ = self.create_publisher(
             NavSatFix,
@@ -160,15 +165,6 @@ class GpsImuNode(Node):
         self.qx, self.qy, self.qz, self.qw = 0.,0.,0.,0.
         self.satellites, self.local_acc, self.horizontal__acc, self.vertical_acc = 0.,0.,0.,0.
         self.altitude, self.angular_velocity, self.ground_speed = 0.,0.,0.
-
-        self.logger = logging.getLogger('GPSImu')
-        logFormatter = logging.Formatter("%(asctime)s [%(name)-8.8s] [%(levelname)-5.5s] %(message)s")
-        consoleHandler = logging.StreamHandler()
-        consoleHandler.setFormatter(logFormatter)
-        logging.basicConfig(
-            level=logging.DEBUG if DEBUG else logging.INFO,
-            handlers=[consoleHandler]
-        )
 
         Thread(target=self._readLoop, daemon=True).start()  # Запуск чтения данных в отдельном потоке
 

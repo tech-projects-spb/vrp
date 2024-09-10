@@ -7,20 +7,23 @@ import time
 import threading
 from math import degrees
 
-MAX_THRUST = 10
+MAX_THRUST = 12
 PERIOD = 10  # Время на проезд прямо (в секундах)
 DIFF = 5  # Допустимое отклонение по компасу
+DIRECTION = {'left' : 1,
+             'right' : -1
+             } # Направление двигателей
 
-logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s [%(name)s] [%(levelname)-5.5s] %(message)s',
-            filename='gps_log.log',
-            filemode='a'
-        )
+# Настройка логгера для записи в файл
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s [%(name)s] [%(levelname)-5.5s] %(message)s',
+                    handlers=[logging.StreamHandler()]
+                    )
 
 class MotorsTest(Node):     
     def __init__(self, name='motors_test', mode='auto'):
-        super().__init__(name)
+        super().__init__(name) 
+        self.logger = logging.getLogger('Motors test') # Создание логгера для данных 
         
         self.mode = mode
         self.left_pub = self.create_publisher(Float64, '/booblik/thrusters/left/thrust', 10)
@@ -31,9 +34,8 @@ class MotorsTest(Node):
             '/booblik/sensors/imu/imu/euler',
             self.yaw_callback,
             10
-        )
+        ) 
 
-        self.logger = logging.getLogger('Motors test')
         self.yaw = 0
         self.left_coeff = 1.0
         self.right_coeff = 1.0
@@ -72,7 +74,7 @@ class MotorsTest(Node):
                     print('Коэффициенты должны быть в диапазоне от 0 до 100')
                     continue
                 
-                self.logger.info(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
+                # self.logger.info(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
                 
                 # Публикуем значения
                 self.publish_thrust(self.left_coeff, 'left')
@@ -92,18 +94,16 @@ class MotorsTest(Node):
 
         self.check_straight_moving(self.yaw - self.start_yaw)
 
-        self.check_moving_time()
-
     def publish_loop(self):
         '''Публикация коэффициентов на двигатели каждую секунду'''
         self.publish_thrust(self.left_coeff, 'left')
         self.publish_thrust(self.right_coeff, 'right')
-        self.logger.info(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
+        self.logger.debug(f'Текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}')
 
     def publish_thrust(self, coefficient: float, thrust: str):
         '''Универсальная функция публикации тяги'''
         power = Float64()
-        power.data = coefficient * MAX_THRUST
+        power.data = coefficient * MAX_THRUST * DIRECTION[thrust]
 
         # Публикация по строке 'thrust'
         publisher = getattr(self, f'{thrust}_pub', None)
@@ -126,13 +126,12 @@ class MotorsTest(Node):
             self.start_yaw = self.yaw
         else:
             self.time_straight += 1
-            self.logger.info(f'Робот движется прямо при отклонении угла {yaw_diff}, время движения прямо {self.time_straight} секунд')        
-
-    def check_moving_time(self):
-        '''Проверка длительности движения'''
-        if abs(time.time() - self.get_clock().now().seconds_nanoseconds()[0]) > PERIOD:
+            self.logger.info(f'Робот движется прямо, текущие коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}, при Yaw {self.yaw}, время движения прямо {self.time_straight} секунд') 
+        
+        if self.time_straight >= PERIOD:
             self.logger.info(f'Бублик успешно проехал 10 секунд. Завершаем тесты. Итоговые коэффициенты тяги: Left = {self.left_coeff}, Right = {self.right_coeff}')
-            rclpy.shutdown()          
+            rclpy.shutdown()       
+       
 
 def main(args=None):
     rclpy.init(args=args)
