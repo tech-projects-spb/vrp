@@ -37,6 +37,7 @@ setup(
                     'ec_tds_sensor = booblik.ec_tds_sensor:main',
                     'ph_temp_sensor = booblik.ph_temp_sensor:main',
                     'disolved_oxygen_sensor = booblik.disolved_oxygen_sensor:main',
+                    'led_controller = booblik.led_controller:main'
                 ],
     },
 )
