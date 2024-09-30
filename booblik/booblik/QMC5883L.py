@@ -7,33 +7,37 @@ from sensor_msgs.msg import Imu  # Стандартный тип сообщен�
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Float64
 import math 
-from . import logging_config
-from .utils import euler_to_quaternion
+import logging_config
+from .utils import euler_to_quaternion, get_directory, load_config
+import os
+import json
 
 import logging 
-DEBUG = True
 
-# Калибровочные данные для магнитометра
-CALIBRATION_MATRIX = [[1.0817261189833043, -0.06705906178799911, -485.7272567957916],
-                      [0.06705906178799906, -1.0550242422352802, 2953.8769005789645],
-                      [0.0, 0.0, 1.0]]
-
-DECLINATIONS = { # Данные по магнитному склонению на 16.08.2024
-    'Obninsk' : 11.57,
-    'Saint-Petersburg' : 12.0873,
-    'Vladivostok' : -10.9382
-}
 
 class QMC5883LNode(Node):
-    def __init__(self, name='QMC5883L', location='Saint-Petersburg'):
+    def __init__(self, config_file, name='QMC5883L', default_location='Saint-Petersburg' ):
         super().__init__(name) 
-        logging_config.setup_logging(log_filename='Compas')  # Настройка логгера с использованием имени ноды
-        self.logger = logging.getLogger('Compas') # Создание логгера для данных 
 
-        # self.declare_parameter('location', 'default_location')
-        # location = self.get_parameter('location').get_parameter_value().string_value
+        # Настройка логгера с использованием имени ноды
+        logging_config.setup_logging(log_filename='Compas', date=True)
+        self.logger = logging.getLogger('Compas') 
 
-        self.sensor = self.initialize_sensor(location)
+        self.config = self.load_config(config_file) 
+        self.construction_angle_fix = self.config['compas']['construction_angle_fix']
+
+        # Установка местоположения
+        self.location = self.config.get('location', default_location)
+        self.logger.info(f"Using location: {self.location}")
+
+        # Получение значения склонения для указанного местоположения
+        declinations = self.config['compas']['declinations']
+        self.declination = declinations.get(self.location, declinations[default_location])
+        self.logger.debug(f"Magnetic declination for {self.location}: {self.declination}")
+        
+
+        # Инициализация сенсора с использованием местоположения
+        self.sensor = self.initialize_sensor() 
         
         self.imu_ = self.create_publisher(
             Imu,
@@ -52,26 +56,26 @@ class QMC5883LNode(Node):
         )
 
         self.update_rate = 0.1  # Частота обновления данных в секундах
-        # Запуск потока для чтения данных с магнитометра
-        Thread(target=self._readLoop, daemon=True).start()
+        Thread(target=self._readLoop, daemon=True).start()  # Запуск потока для чтения данных с магнитометра
 
-    def initialize_sensor(self, location):
+    def initialize_sensor(self):
         """Инициализация магнитометра с помощью калибовочной матрицы"""
         while True:
             try:
                 sensor = raspy_qmc5883l.QMC5883L()
-                sensor.calibration = CALIBRATION_MATRIX
-                self.logger.info('Magnetometer initialized successfully.') 
+                sensor.calibration = self.config['compas']['calibration_matrix']
+                self.logger.info(f'Magnetometer initialized successfully.') 
                 # Выбор магнитного склонения для инициализации в зависимости от местоположения
-                sensor.declination = DECLINATIONS.get(location,'Saint-Petersburg')
-                self.logger.info('Declination set for {location}.')
+                sensor.declination = self.declination + self.construction_angle_fix
+                self.logger.info(f'Declination set for {self.location}.')
                 return sensor
             except Exception as e:
                 self.logger.error(f'Init Error: {e}\nRetrying initialization...')
                 time.sleep(0.5) 
 
     def declination_callback(self, msg):
-        self.sensor.declination = msg.data  
+        self.declination = msg.data
+        self.sensor.declination = msg.data + self.construction_angle_fix
 
     def _readLoop(self):
         """Поток для непрерывного чтения и публикации данных с магнитометра"""
@@ -80,8 +84,8 @@ class QMC5883LNode(Node):
             try:
                 # Получение азимутального угла от магнитометра 
                 bearing = self.sensor.get_bearing()                                
-                self.logger.info(f'Bearing: {bearing},  when declination is {self.sensor.declination}\n')
-                print(f'Bearing with declination: {bearing:.2f}, when declination is {self.sensor.declination:.2f}')
+                self.logger.info(f'Bearing: {bearing}, when declination is {self.declination}\n')
+                print(f'Bearing with declination: {bearing:.2f}, when declination is {self.declination:.2f}')
  
                 # Преобразование азимута в кватернион
                 qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
@@ -112,7 +116,10 @@ class QMC5883LNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    task = QMC5883LNode(location='Vladivostok')
+    # Получаем путь к директории booblik
+    booblik_dir = get_directory(target='booblik') 
+    config_file = os.path.join(booblik_dir, 'config.json')
+    task = QMC5883LNode(config_file=config_file)
     rclpy.spin(task)
     rclpy.shutdown()
 
