@@ -5,6 +5,8 @@ from threading import Thread
 import rclpy  # Импортируем библиотеку ROS2 для Python
 from rclpy.node import Node
 from std_msgs.msg import Float64
+from utils import get_directory
+import os
 import json 
  
 SCALING = 1000  # коэффициент масштабирования PWM сигнала 
@@ -85,7 +87,7 @@ class TroykaMotorDriver:
 
 class MotorsNode(Node):
     """Узел ROS2 для управления моторами"""
-    def __init__(self, config_file='config.json', name='motors'):
+    def __init__(self, config_file, name='motors'):
         super().__init__(name)
 
         # загрузка конфигурации
@@ -154,7 +156,10 @@ class MotorsNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    task = MotorsNode()
+    # Получаем путь к директории booblik
+    booblik_dir = get_directory(target='booblik') 
+    config_file = os.path.join(booblik_dir, 'config.json')
+    task = MotorsNode(config_file=config_file)
     rclpy.spin(task)
     rclpy.shutdown()
 
