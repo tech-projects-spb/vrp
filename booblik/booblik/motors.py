@@ -5,14 +5,16 @@ from threading import Thread
 import rclpy  # Импортируем библиотеку ROS2 для Python
 from rclpy.node import Node
 from std_msgs.msg import Float64
-
-MAX_THRUST = 10
+import json 
+ 
+SCALING = 1000  # коэффициент масштабирования PWM сигнала 
 
 @dataclass #декоратор
 class MotorConfig:
     """Конфигурация отдельного мотора."""
     pin_ap: int  # Номер пина, к которому подключен мотор
     direction: int  # Направление вращения мотора (1 или -1)
+    thrust_coeff: float # Коэффициент тяги для мотора
 
 
 @dataclass
@@ -22,34 +24,29 @@ class MotorsConfig:
     right: MotorConfig  # Правый мотор
     back: MotorConfig  # Задний мотор
 
-
 class TroykaMotorDriver:
-    """Драйвер для управления моторами через TroykaHat."""
-
- 
-    config: MotorsConfig  # Хранит конфигурацию моторов
+    """Драйвер для управления моторами через TroykaHat.""" 
     delta: float = 0.5  # Разница в скорости между стоповым значением PWM и max/min значением
-    stop: float = 1.5  # Значение PWM, при котором моторы находятся в состоянии покоя (не вращаются)
-    freq: float = 500  # Частота PWM сигнала в Гц
-    block_time: float = 1  # Время в секундах 
+    stop: float = 1.5  # Значение PWM, при котором моторы находятся в состоянии покоя (не вращаются) 
 
-    def __init__(self, config: MotorsConfig, freq: float = 500, block_time: float = 1) -> None:
-        self.config = config  # Сохранение конфигурации моторов
-        self.freq = freq  # Частота PWM сигнала
-        self.coeff = self.freq / 1000  # Определение коэффициента масштабирования
+    def __init__(self, config: MotorsConfig, freq: float = 500, block_time: float = 2) -> None:
+        self.config = config  # Конфигурация моторов
+        self.freq = freq  # Частота PWM в Гц
+        self.coeff = self.freq / SCALING  # Коэффициент масштабирования для PWM
+        self.block_time = block_time  # Время блокировки управления
+
         # Настройка пинов для управления моторами
         self.ap = troykahat.analog_io()
         self.ap._setPwmFreq(self.freq)  # Устанавливаем частоту PWM
-        # Установка режима работы пинов
         self.ap.pinMode(self.config.left.pin_ap, self.ap.OUTPUT)
         self.ap.pinMode(self.config.right.pin_ap, self.ap.OUTPUT)
-        self.ap.pinMode(self.config.back.pin_ap, self.ap.OUTPUT)    
+        self.ap.pinMode(self.config.back.pin_ap, self.ap.OUTPUT)
+
         self.initializeMotors()  # Инициализация моторов в нейтральное положение
 
         self.last_time = time.time()  # Время последней команды управления
-        self.block_time = block_time  # Время блокировки управления после последней команды
         self.alarm = False
-        Thread(target=self.checkLoop, daemon=True).start() # Запускаем поток для контроля блокировки
+        Thread(target=self.checkLoop, daemon=True).start()  # Запуск потока для контроля времени блокировки
 
     def initializeMotors(self):
         """Инициализация моторов в нейтральное положение."""
@@ -63,15 +60,16 @@ class TroykaMotorDriver:
         """Установка тяги для каждого из моторов."""
         self.last_time = time.time()  # Обновляем время последней команды
 
-        # Расчёт и установка тяги с учётом направления вращения и коэффициента масштабирования
-        self.applyThrust(left, self.config.left.pin_ap, self.config.left.direction)
-        self.applyThrust(right, self.config.right.pin_ap, self.config.right.direction)
-        self.applyThrust(back, self.config.back.pin_ap, self.config.back.direction)
+        # Расчёт и установка тяги с учётом направления вращения, коэффициента масштабирования и коэффициентов тяги
+        self.applyThrust(left, self.config.left.pin_ap, self.config.left.direction, self.config.left.thrust_coeff)
+        self.applyThrust(right, self.config.right.pin_ap, self.config.right.direction, self.config.right.thrust_coeff)
+        self.applyThrust(back, self.config.back.pin_ap, self.config.back.direction, self.config.back.thrust_coeff)
+        
         self.last_time = time.time()  # Обновляем время последней команды
 
-    def applyThrust(self, value: float, pin: int, direction: int):
+    def applyThrust(self, value: float, pin: int, direction: int, thrust_coeff: float):
         """Применение тяги к мотору."""
-        p = (self.stop + value * self.delta * direction) * self.coeff
+        p = (self.stop + value * self.delta * direction * thrust_coeff) * self.coeff
         self.ap.analogWrite(pin, p)
 
     def checkLoop(self):
@@ -87,18 +85,23 @@ class TroykaMotorDriver:
 
 class MotorsNode(Node):
     """Узел ROS2 для управления моторами"""
-    def __init__(self, name='motors'):
+    def __init__(self, config_file='config.json', name='motors'):
         super().__init__(name)
+
+        # загрузка конфигурации
+        self.config = self.load_config(config_file)
+
         self.left = 0
         self.right = 0
         self.back = 0
         
         # Инициализация драйвера моторов с конфигурацией
         self.driver = TroykaMotorDriver(MotorsConfig(
-            MotorConfig(0, 1),  # Левый мотор
-            MotorConfig(1, -1),  # Правый мотор
-            MotorConfig(2, 1),   # Задний мотор 
+            MotorConfig(self.config['motors']['left_pin'], self.config['motors']['left_direction'], self.config['motors']['left_thrust_coeff']),  # Левый мотор
+            MotorConfig(self.config['motors']['right_pin'], self.config['motors']['right_direction'], self.config['motors']['right_thrust_coeff']),  # Правый мотор
+            MotorConfig(self.config['motors']['back_pin'], self.config['motors']['back_direction'], self.config['motors']['back_thrust_coeff']),   # Задний мотор 
         ), freq=500)
+        
         # Подписка на топики для управления тягой моторов
         self.setupSubscribers()
 
@@ -124,15 +127,23 @@ class MotorsNode(Node):
             self.back_callback,
             10)
         self.back_
-    
+
     # Обработкиа сообщений от топиков
     def left_callback(self, data): self.updateThrust('left', data.data)
     def right_callback(self, data): self.updateThrust('right', data.data)
     def back_callback(self, data): self.updateThrust('back', data.data)
 
+    def load_config(self, file_path):
+        """Загрузка конфигурации из JSON файла."""
+        with open(file_path, 'r') as f:
+            config = json.load(f)
+        return config     
+    
+
     def updateThrust(self, motor: str, value: float):
         """Обновление тяги и отправка значений в драйвер."""
-        value = min(MAX_THRUST, max(-MAX_THRUST, value))
+        max_thrust = self.config['motors']['max_thrust']
+        value = min(max_thrust, max(-max_thrust, value))
         setattr(self, motor, value / 20.0)  # Преобразование значения тяги
         self.send_thrust()  # Отправка обновлённых значений тяги в драйвер
 
