@@ -1,6 +1,8 @@
 import math
 import os
 import stat
+import time
+import json
 
 
 def euler_to_quaternion(yaw, pitch, roll):
@@ -53,6 +55,12 @@ def declin_dir(mag_var, direction):
     """Обработка направления магнитного склонения"""
     return mag_var if direction == 'E' else -mag_var
 
+def load_config(file_path):
+    """Загрузка конфигурации из JSON файла."""
+    with open(file_path, 'r') as f:
+        config = json.load(f)
+    return config  
+    
 def get_directory(target='log', *path_segments):
     """
     Универсальная функция для получения пути к директориям.
@@ -105,3 +113,28 @@ def get_directory(target='log', *path_segments):
         return None
 
     return dir_path
+
+def get_filename(log_dir, log_filename=None, node_name=None, date=False):
+    """
+    Возвращает имя файла для логов, используя имя файла, имя ноды или стандартное имя.
+    
+    :param log_dir: Путь к директории логов.
+    :param log_filename: Явное имя файла для логов.
+    :param node_name: Имя ноды (используется как имя файла, если log_filename не указано).
+    :param date: Если True, добавляет дату в имя файла.
+    :return: Полный путь к файлу лога.
+    """
+    # Формируем имя файла: используем log_filename, если передано, иначе node_name, если нет — "log"
+    name = log_filename or node_name or 'log'
+    
+    # Получаем текущую дату
+    localdate = time.strftime("%Y.%m.%d") if date else ''
+    
+    # Если требуется добавить дату в имя файла
+    if date:
+        logfile = os.path.join(log_dir, f'{name}-{localdate}.log')
+    else:
+        logfile = os.path.join(log_dir, f'{name}.log')
+
+    print(f"Log file will be: {logfile}")
+    return logfile
