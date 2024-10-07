@@ -41,8 +41,8 @@ class LidarNode(Node):
     def initialize_lidar(self):
         """Устанавливаем частоту вращения лидара (в RPM) и включаем его"""
         self.ser = serial.Serial(self.config.port, self.config.baudrate) 
-        self.ser.write("LSRPM:{:d}H\n\r".format(self.freq * 60).encode("ascii"))
-        self.ser.write("LOCONH\n\r".format(self.freq * 60).encode("ascii"))
+        self.ser.write("LSRPM:{:d}H\n\r".format(self.config.frequency * 60).encode("ascii"))
+        self.ser.write("LOCONH\n\r".format(self.config.frequency * 60).encode("ascii"))
 
     def _read_loop(self):
         """Поток для чтения данных с лидара и их публикации."""
