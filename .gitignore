@@ -1,0 +1,12 @@
+syntax: glob
+
+.DS_Store
+*.swp
+*.orig
+*.*~
+*.pyc
+log
+*.log
+.vscode
+*.json
+config*
