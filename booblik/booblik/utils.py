@@ -3,7 +3,11 @@ import os
 import stat
 import time
 import json
+import logging
+import cv2
+import numpy as np
 
+logger = logging.getLogger(__name__)
 
 def euler_to_quaternion(yaw, pitch, roll):
     """Преобразование углов Эйлера в кватернионы для описания ориентации в пространстве"""
@@ -56,10 +60,18 @@ def declin_dir(mag_var, direction):
     return mag_var if direction == 'E' else -mag_var
 
 def load_config(file_path):
-    """Загрузка конфигурации из JSON файла."""
-    with open(file_path, 'r') as f:
-        config = json.load(f)
-    return config  
+    """Функция для загрузки конфигурационного файла"""
+    try:
+        with open(file_path, 'r') as file:
+            config = json.load(file)
+            logger.info(f"Конфигурация загружена из {file_path}")
+            return config
+    except FileNotFoundError:
+        logger.error(f"Файл конфигурации {file_path} не найден.")
+        return {}
+    except json.JSONDecodeError:
+        logger.error(f"Ошибка в формате конфигурационного файла {file_path}.")
+        return {}
     
 def get_directory(target='log', *path_segments):
     """
@@ -138,3 +150,37 @@ def get_filename(log_dir, log_filename=None, node_name=None, date=False):
 
     print(f"Log file will be: {logfile}")
     return logfile
+
+def resize(old_size, frame):
+    proportion = max(old_size[0] / frame[0], old_size[1] / frame[1])
+    return (int(old_size[0] / proportion), int(old_size[1] / proportion))
+
+def modified_image(image, new_height, new_width):
+    """
+    Масштабирует изображение под заданные размеры и центрирует его на холсте для работы с LED модулем.
+    """
+    old_height, old_width = image.shape[:2] 
+    new_size = resize((old_height, old_width), (new_height, new_width) ) 
+    resized_image = cv2.resize(image, (new_size[1], new_size[0]), interpolation = cv2.INTER_AREA)
+    new_image = np.zeros((new_height, new_width, 3), dtype="uint8")
+    start_y = (new_height - new_size[0]) // 2
+    start_x = (new_width - new_size[1]) // 2 
+    # Размещаем масштабированное изображение на новом холсте
+    new_image[start_y:start_y + new_size[0], start_x:start_x + new_size[1]] = resized_image
+    return new_image
+
+def get_led_index(self, x, y, width, height, is_right):
+    '''Вспомогательная функция для вычисления индекса светодиода (с учётом направления "змеевидной" матрице )'''
+    if is_right:
+        # Для правой ленты (начинаем с правого нижнего угла)
+        y = height - 1 - y
+        if y % 2 != 0:
+            return y * width + x
+        else:
+            return y * width + (width - 1 - x)
+    else:
+        # Для левой ленты (начинаем с верхнего левого угла)
+        if y % 2 == 0:
+            return y * width + x
+        else:
+            return y * width + (width - 1 - x)

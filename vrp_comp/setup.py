@@ -31,7 +31,8 @@ setup(
             'tAdA = vrp_comp.tAdA:main',
             'vorsha = vrp_comp.vorsha:main',
             'seaphoenix = vrp_comp.seaphoenix:main',
-            'motors_test = test.motors_test:main' 
+            'motors_test = test.motors_test:main',
+            'led_show = vrp_comp.led_show:main' 
         ],
     },
 )

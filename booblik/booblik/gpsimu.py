@@ -10,10 +10,11 @@ from sensor_msgs.msg import NavSatFix, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import UInt32, Float32
+from booblik.utils import euler_from_quaternion, get_directory, load_config
 
 import logging
-from . import logging_config
-DEBUG = True
+# from booblik import logging_config
+DEBUG = False
 
 class PacketID(Enum):
     RTC = 0x50 #< Real-Time-Clock: Year from 2000, Month, Day, Hour, Minute, Second (8-bit unsigned integers) + Millisecond (16-bit unsigned integer), representing time passed since last time set up in the \ref ridTimeYearMonth, \ref ridTimeDayHour, \ref ridTimeMinuteSecond and \ref ridTimeMilliseconds registers
@@ -40,6 +41,11 @@ format_acceleration = format_default
 format_gps_accuracy = format_default
 format_gps_ground_speed = "=BBhhhic"
 
+logging.basicConfig(
+        level=logging.DEBUG if DEBUG else logging.INFO,
+        format='%(asctime)s [%(name)s] [%(levelname)-5.5s] %(message)s',
+        handlers=[logging.StreamHandler()]
+    )
 
 def parseLanLon(packet: bytearray):
     """Разбор пакета данных с широтой и долготой."""
@@ -124,10 +130,10 @@ class GpsImuNode(Node):
 
     def __init__(self, name='gpsimu'):
         super().__init__(name)
-        self.config = GpsConfig('/dev/serial0', 9600)  # Конфигурация порта
+        self.config = GpsConfig('/dev/ttyUSB0', 9600)  # Конфигурация порта
 
-        logging_config.setup_logging(log_filename='Compas')  # Настройка логгера с использованием имени ноды
-        self.logger = logging.getLogger('Compas') # Создание логгера для данных 
+        # logging_config.setup_logging(log_filename='Compas')  # Настройка логгера с использованием имени ноды
+        self.logger = logging.getLogger('GPSImu') # Создание логгера для данных 
 
         # Создание издателей для GPS и IMU
         self.nav_ = self.create_publisher(
@@ -191,7 +197,9 @@ class GpsImuNode(Node):
         print
         if packet[1] == PacketID.Orientation.value:  # Если пакет содержит данные кватернионов
             self.qx, self.qy, self.qz, self.qw = parseQuat(packet)  # Разбор данных кватернионов
-            self.logger.debug(f'Parsing Quaternions: {self.qx=}\t{self.qy=}\t{self.qz=}\t{self.qw=}')           
+            row, pitch, yaw = map(math.degrees, euler_from_quaternion(self.qx, self.qy, self.qz, self.qw))
+            self.logger.debug(f'Parsing Quaternions: {self.qx=}\t{self.qy=}\t{self.qz=}\t{self.qw=}') 
+            self.logger.info(f'{row=:2f}\t {pitch=:2f}\t{yaw=:2f}')          
             self.imu_process()
             self.odometry_process()
         elif packet[1] == PacketID.AngularVelocity.value:  

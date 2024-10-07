@@ -8,13 +8,13 @@ from launch_ros.actions import Node
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('ping', default_value='false', description='Use sounder'),
-        Node(
-            package='booblik',
-            namespace='booblik',
-            executable='motors',
-            name='motors',
-            output='screen'
-        ),
+        # Node(
+        #     package='booblik',
+        #     namespace='booblik',
+        #     executable='motors',
+        #     name='motors',
+        #     output='screen'
+        # ),
         Node(
             package='booblik',
             namespace='booblik',

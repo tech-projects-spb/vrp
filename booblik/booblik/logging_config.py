@@ -1,4 +1,4 @@
-from utils import get_directory, get_filename
+from booblik.utils import get_directory, get_filename
 import logging 
 
 DEBUG = True
@@ -11,7 +11,7 @@ def setup_logging(node_name=None, log_filename=None, date=True):
     :param log_filename: Явное имя лог-файла.
     :param date: Включать ли дату в имя файла.
     """
-# Получаем путь к директории логов
+    # Получаем путь к директории логов
     log_dir = get_directory(target='log')
     
     # Получаем имя лог-файла
