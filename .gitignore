@@ -6,4 +6,7 @@ syntax: glob
 *.*~
 *.pyc
 log
+*.log
 .vscode
+*.json
+config*

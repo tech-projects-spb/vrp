@@ -1,107 +1,133 @@
-from threading import Thread
 import rclpy
 from rclpy.node import Node
-import time
 import raspy_qmc5883l  # Библиотека для работы с магнитометром QMC5883L
 from sensor_msgs.msg import Imu  # Стандартный тип сообщения ROS для данных IMU
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Vector3
+from std_msgs.msg import Float64
 import math
+from booblik.logging_config import setup_logging
+from booblik.utils import euler_to_quaternion, load_config, get_directory
+import os
+import logging
 
-def degrees_to_radians(degrees):
-    """Конвертация углов из градусов в радианы"""
-    return degrees * math.pi / 180
-
-def euler_to_quaternion(yaw, pitch, roll):
-    """Преобразование углов Эйлера в кватернион для описания ориентации в пространстве"""
-    cy = math.cos(yaw * 0.5)
-    sy = math.sin(yaw * 0.5)
-    cp = math.cos(pitch * 0.5)
-    sp = math.sin(pitch * 0.5)
-    cr = math.cos(roll * 0.5)
-    sr = math.sin(roll * 0.5)
-
-    qw = cy * cp * cr + sy * sp * sr
-    qx = cy * cp * sr - sy * sp * cr
-    qy = sy * cp * sr + cy * sp * cr
-    qz = sy * cp * cr - cy * sp * sr
-
-    return qw, qx, qy, qz
 
 class QMC5883LNode(Node):
-    def __init__(self, name='QMC5883L'):
+    def __init__(self, config, name='QMC5883L'):
         super().__init__(name)
-        # Запуск потока для чтения данных с магнитометра
-        Thread(target=self._readLoop, daemon=True).start()
-        while 1:
-            try:
-                # Инициализация магнитометра
-                self.sensor = raspy_qmc5883l.QMC5883L()
-                # Загрузка калибровочных данных для магнитометра
-                #TODO read from config? 
-                self.sensor.calibration = [[1.0817261189833043, -0.06705906178799911, -485.7272567957916], 
-                      [-0.06705906178799906, 1.0550242422352802, -2953.8769005789645], 
-                      [0.0, 0.0, 1.0]]
-                break
-            except:
-                print("Init Error. Try init again...")
-                time.sleep(0.1)
 
-        # Создание издателя для публикации данных IMU        
-        self.imu_ = self.create_publisher(
+        # Настройка логгера с использованием имени ноды
+        setup_logging(log_filename='Compass', date=True)
+        self.logger = logging.getLogger('Compass')
+
+        self.config = config 
+
+        # Установка местоположения
+        location = self.config.get('location', 'Saint-Petersburg')
+        self.logger.info(f"Using location: {location}")
+
+        # Получение значения склонения для указанного местоположения
+        declinations = self.config['declinations']
+        self.declination = declinations.get(location, declinations.get('Saint-Petersburg'))
+        self.logger.debug(f"Magnetic declination for {location}: {self.declination}")
+        
+
+        # Инициализация сенсора с использованием местоположения
+        self.sensor = self.initialize_sensor() 
+        
+        self.imu_publisher = self.create_publisher(
             Imu,
-            '/booblik/sensors/imu/imu/data',
+            '/booblik/sensors/imu/imu/quaternions',
             10)
-        self.odometry_ = self.create_publisher(
-            Odometry,
-            '/booblik/sensors/position/ground_truth_odometry',
+        self.euler_publisher = self.create_publisher(
+            Vector3,
+            '/booblik/sensors/imu/imu/euler',
             10)
-            
+        
+        self.declination_subscription = self.create_subscription(
+            Float64,
+            '/booblik/sensors/gps/navsat/declination',
+            self.declination_callback,
+            10
+        )
 
-    def _readLoop(self):
-        """Поток для непрерывного чтения и публикации данных с магнитометра."""
-        while True:
-            time.sleep(0.1)  # Ограничение частоты чтения
+        # Запуск непрерывного чтения данных
+        self.read_data_continuously()
+
+    def initialize_sensor(self):
+        """Инициализация магнитометра с помощью калибовочной матрицы и склонения"""
+        while rclpy.ok():
+            try:
+                sensor = raspy_qmc5883l.QMC5883L()
+                sensor.calibration = self.config['calibration_matrix']
+                self.logger.info(f'Magnetometer initialized successfully.') 
+                
+                # Выбор магнитного склонения для инициализации в зависимости от местоположения
+                sensor.declination = self.declination + self.config['construction_angle_fix']
+                self.logger.info(f'Declination set: {self.declination} with construction redused {self.config["construction_angle_fix"]}')
+                return sensor
+            except Exception as e:
+                self.logger.error(f'Init Error: {type(e).__name__} - {e}\nRetrying initialization...') 
+
+    def declination_callback(self, msg):
+        """Обновление магнитного склонения при получении данных от GPS"""
+        self.declination = msg.data
+        self.sensor.declination = self.declination + self.config['construction_angle_fix']
+        self.logger.info(f'Updated declination using GPS data: {self.declination}')
+
+    def read_data_continuously(self):
+        """Непрерывное чтение данных с магнитометра."""
+        while rclpy.ok():
             try:
                 # Получение азимутального угла от магнитометра 
-                bearing = self.sensor.get_bearing()                
-                print('Bearing', bearing)
-
-                # NOTE это нужно, чтобы в pypilot отображалось правильно
-                bearing = math.degrees(math.pi/ 2) - bearing
-
+                bearing = self.sensor.get_bearing()  # Здесь библиотека непрерывно возвращает новые данные
+                self.logger.info(f'Bearing: {bearing}, when declination is {self.declination}')
+                print(f'Bearing with declination: {bearing:.2f}, when declination is {self.declination:.2f}')
+ 
                 # Преобразование азимута в кватернион
                 qw, qx, qy, qz = euler_to_quaternion(math.radians(bearing), 0, 0)
-                self.publishQuats((qw, qx, qy, qz))
+                self.publish_quaternion((qw, qx, qy, qz))
+                self.publish_euler(math.radians(bearing), 0.0, 0.0)
                 
             except Exception as e:
-                print("Except: Reques error: ", e)
-    
-    def publishQuats(self, quats):
-        qw, qx, qy, qz = quats
+                self.logger.error(f'Except: Request error: {e}')
 
-        # Формирование и публикация сообщения Odometry
-        odometry = Odometry()
-        # Заполнение данных ориентации
-        odometry.pose.pose.orientation.x = qx
-        odometry.pose.pose.orientation.y = qy
-        odometry.pose.pose.orientation.z = qz
-        odometry.pose.pose.orientation.w = qw
-        self.odometry_.publish(odometry)
-    
-        # Формирование и публикация сообщения IMU
-        imu = Imu() 
+    def stop(self):
+        self.running = False  # Остановка потока
+        self.thread.join()  # Ждем завершения потока
+
+    def publish_quaternion(self, quats):
+        """Публикация кватернионов."""
+        qw, qx, qy, qz = quats
+        imu = Imu()
         # Заполнение данных ориентации
         imu.orientation.x = qx
         imu.orientation.y = qy
         imu.orientation.z = qz
         imu.orientation.w = qw
-        self.imu_.publish(imu)
+        self.imu_publisher.publish(imu)
+    
+    def publish_euler(self, yaw, pitch, roll):
+        """Публикация углов Эйлера."""
+        euler = Vector3()
+        euler.x = pitch
+        euler.y = yaw
+        euler.z = roll
+        self.euler_publisher.publish(euler)
 
 def main(args=None):
     rclpy.init(args=args)
-    task = QMC5883LNode()
-    rclpy.spin(task)
-    rclpy.shutdown()
+    booblik_dir = get_directory(target='booblik')
+    config_file = os.path.join(booblik_dir, 'config.json')
+    config = load_config(config_file)  # Загрузка конфигурации
+
+    task = QMC5883LNode(config['compass'])  # Передаем конфигурацию в конструктор ноды
+    try:
+        rclpy.spin(task)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        task.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

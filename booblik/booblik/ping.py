@@ -1,81 +1,87 @@
 from dataclasses import dataclass
 from brping import Ping1D  # Импорт библиотеки для работы с эхолотом Ping1D
-from threading import Thread
 import rclpy
 from rclpy.node import Node
 from booblik_msg.msg import Echo1d  # Импорт пользовательского типа сообщения для ROS2
 import time
-from datetime import datetime
+import os
+from booblik.utils import get_directory, load_config
+from booblik.logging_config import setup_logging
+import logging
+
 
 @dataclass
 class PingConfig:
     """Конфигурация для эхолота Ping1D."""
     port: str  # Серийный порт подключения
     baudrate: int  # Скорость передачи данных
-    period: float  # Период между измерениями в миллисекундах
-    speed_of_sound: float  # Скорость звука в воде в м/с
+    period: float = 500 # Период между измерениями в миллисекундах
+    speed_of_sound: float = 1490  # Скорость звука в воде в м/с
 
 
 class Ping1dNode(Node):
-    """Узел ROS2 для считывания данных с эхолота Ping1D."""
-    config: PingConfig
-
-    def __init__(self, name='echo_ping'):
+    def __init__(self, config, name='echo_ping'):
         super().__init__(name)
         self.config = PingConfig(
-            '/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.2:1.0-port0',  # порт подключения в соответствии с паспортом
-            115200,
-            500,
-            1490
+            config['port'],  # порт подключения в соответствии с конфигом
+            config['baudrate']
         )
-        # Создание издателя для публикации данных эхолота
-        self.echo1d_ = self.create_publisher(
+
+        setup_logging(log_filename='Echo_sounder', date=True)
+        self.logger = logging.getLogger('Echo_sounder')
+
+        self.echo1d_publisher = self.create_publisher(
             Echo1d,
             '/booblik/sensors/echo1d',
             10)
+        
+        self.initialize_ping()
 
-        # Запуск потока для чтения и публикации данных эхолота
-        Thread(target=self._readLoop, daemon=True).start()
+        # Установка таймера для периодического вызова функции 
+        self.timer = self.create_timer(self.config.period / 1000, self._read_loop)
 
-    def _readLoop(self):
-        """Чтение данных с эхолота и публикация в ROS."""
-        ping = Ping1D()
-        ping.connect_serial(self.config.port, self.config.baudrate)
-        if ping.initialize() is False:
-            print("Failed to initialize Ping!")
+    def initialize_ping(self):
+        """Инициализация эхолота с учетом конфигурации"""
+        self.ping = Ping1D()
+        self.ping.connect_serial(self.config.port, self.config.baudrate)
+        if not self.ping.initialize():
+            self.logger.error(f'Failed to initialize Ping!')
+            print(f'Failed to initialize Ping!')
             exit(1)
         # Установка скорости звука для корректных измерений
-        ping.set_speed_of_sound(self.config.speed_of_sound * 1000)
+        self.ping.set_speed_of_sound(self.config.speed_of_sound * 1000)
 
-        while True:
-            start = datetime.now()
-            data = ping.get_distance()  # Получение данных от эхолота
-            # Создание сообщения ROS с данными от эхолота
+    def _read_loop(self):
+        """Чтение данных с эхолота и публикация в ROS."""
+        data = self.ping.get_distance()  # Получение данных от эхолота
+        
+        if data:
             msg = Echo1d()
-            msg.distance = data["distance"]
-            msg.confidence = data["confidence"]
-            msg.scan_start = data["scan_start"]
-            msg.scan_length = data["scan_length"]
-            msg.transmit_duration = data["transmit_duration"]
-            msg.gain_setting = data["gain_setting"]
+            msg.distance = data['distance']
+            msg.confidence = data['confidence']
+            msg.scan_start = data['scan_start']
+            msg.scan_length = data['scan_length']
+            msg.transmit_duration = data['transmit_duration']
+            msg.gain_setting = data['gain_setting']
 
-            # Публикация сообщения
-            self.echo1d_.publish(msg)
+            self.echo1d_publisher.publish(msg)
             # Логирование полученных данных 
-            self.get_logger().info(
-                f"Distance: {data['distance']}\t"
-                f"Confidence: {data['confidence']}%"
-            )
-            # Пауза до следующего измерения
-            time.sleep(self.config.period/1000)
-
+            self.logger.info(f"Distance: {data['distance']}\t Confidence:{data['confidence']}%")
 
 
 def main(args=None):
     rclpy.init(args=args)
-    task = Ping1dNode()  # Создание экземпляра узла
-    rclpy.spin(task)  # Запуск узла
-    rclpy.shutdown()  # Завершение работы узла
+    booblik_dir = get_directory(target='booblik')
+    config_file = os.path.join(booblik_dir, 'config.json')
+    config = load_config(config_file)  # Загрузка конфигурации
+    task = Ping1dNode(config['ping'])
+    try:
+        rclpy.spin(task)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        task.destroy_node()
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':

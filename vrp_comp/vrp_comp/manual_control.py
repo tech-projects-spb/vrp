@@ -27,9 +27,9 @@ class ManualControl(Node):
         pygame.init()
         pygame.joystick.init()
 
+        self.mode = ThrustMode.H_Mode
         self.joyThread = threading.Thread(
             target=self.joystickThread, daemon=True).start()
-        self.mode = ThrustMode.H_Mode
 
         self.keyboardThread = threading.Thread(
             target=self.keyboardControlThread, daemon=True).start()
