@@ -9,7 +9,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-def euler_to_quaternion(yaw, pitch, roll):
+def euler_to_quaternion(yaw: float, pitch: float, roll: float)-> tuple[float, float, float, float]:
     """Преобразование углов Эйлера в кватернионы для описания ориентации в пространстве"""
     cy = math.cos(yaw * 0.5)
     sy = math.sin(yaw * 0.5)
@@ -25,12 +25,12 @@ def euler_to_quaternion(yaw, pitch, roll):
 
     return qw, qx, qy, qz
 
-def euler_from_quaternion(x, y, z, w):
+def euler_from_quaternion(x: float, y: float, z: float, w: float) -> tuple[float, float, float, float]:
     """
-    Convert a quaternion into euler angles (roll, pitch, yaw)
-    roll is rotation around x in radians (counterclockwise)
-    pitch is rotation around y in radians (counterclockwise)
-    yaw is rotation around z in radians (counterclockwise)
+    Преобразование углов Эйлера в кватернионы (roll, pitch, yaw)
+    :param roll: крен (вращение вокруг оси x в радианах, против часовой стрелки)
+    :param pitch: тангаж (вращение вокруг оси y в радианах, против часовой стрелки)
+    :param yaw: рыскание (вращение вокруг оси z в радианах, против часовой стрелки)
     """
     t0 = +2.0 * (w * x + y * z)
     t1 = +1.0 - 2.0 * (x * x + y * y)
@@ -47,19 +47,19 @@ def euler_from_quaternion(x, y, z, w):
 
     return roll_x, pitch_y, yaw_z  # in radians
 
-def kmph_2_mps(kmph):
+def kmph_2_mps(kmph: float) ->  float:
     """Конвертация км/ч в м/с"""
     return kmph / 3.6
 
-def knot_2_mps(knots):
+def knot_2_mps(knots: float) ->  float:
     """Конвертация узлы в м/с"""
     return knots * 0.514444
 
-def declin_dir(mag_var, direction):
+def declin_dir(mag_var: float, direction: str) -> float:
     """Обработка направления магнитного склонения"""
     return mag_var if direction == 'E' else -mag_var
 
-def load_config(file_path):
+def load_config(file_path: str) ->  dict:
     """Функция для загрузки конфигурационного файла"""
     try:
         with open(file_path, 'r') as file:
@@ -73,7 +73,7 @@ def load_config(file_path):
         logger.error(f"Ошибка в формате конфигурационного файла {file_path}.")
         return {}
     
-def get_directory(target='log', *path_segments):
+def get_directory(target: str = 'log', *path_segments: dict) -> str:
     """
     Универсальная функция для получения пути к директориям.
     Может возвращать путь к папке для логов или к папке с кодом (например, booblik).
@@ -126,7 +126,7 @@ def get_directory(target='log', *path_segments):
 
     return dir_path
 
-def get_filename(log_dir, log_filename=None, node_name=None, date=False):
+def get_filename(log_dir: str, log_filename: str = None, node_name: str = None, date: bool = False) -> str:
     """
     Возвращает имя файла для логов, используя имя файла, имя ноды или стандартное имя.
     
@@ -151,11 +151,11 @@ def get_filename(log_dir, log_filename=None, node_name=None, date=False):
     print(f"Log file will be: {logfile}")
     return logfile
 
-def resize(old_size, frame):
+def resize(old_size: tuple[int, int], frame:  tuple[int, int]) -> tuple[int, int]:
     proportion = max(old_size[0] / frame[0], old_size[1] / frame[1])
     return (int(old_size[0] / proportion), int(old_size[1] / proportion))
 
-def modified_image(image, new_height, new_width):
+def modified_image(image: np.ndarray, new_height: int, new_width: int) -> np.ndarray:
     """
     Масштабирует изображение под заданные размеры и центрирует его на холсте для работы с LED модулем.
     """
@@ -168,19 +168,3 @@ def modified_image(image, new_height, new_width):
     # Размещаем масштабированное изображение на новом холсте
     new_image[start_y:start_y + new_size[0], start_x:start_x + new_size[1]] = resized_image
     return new_image
-
-def get_led_index(self, x, y, width, height, is_right):
-    '''Вспомогательная функция для вычисления индекса светодиода (с учётом направления "змеевидной" матрице )'''
-    if is_right:
-        # Для правой ленты (начинаем с правого нижнего угла)
-        y = height - 1 - y
-        if y % 2 != 0:
-            return y * width + x
-        else:
-            return y * width + (width - 1 - x)
-    else:
-        # Для левой ленты (начинаем с верхнего левого угла)
-        if y % 2 == 0:
-            return y * width + x
-        else:
-            return y * width + (width - 1 - x)

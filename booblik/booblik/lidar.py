@@ -20,13 +20,13 @@ class LidarConfig:
     port: str   # Порт подключения
     baudrate: int   # Скорость передачи данных
     frequency: int   # Частота вращения измерений лидара в Гц
+    range_min: float  # Минимальное расстояние сканирования
+    range_max: float  # Максимальное расстояние сканирования
 
 class LidarNode(Node):
     def __init__(self, config, name="lidar"):
         super().__init__(name)
-        self.config = LidarConfig(config['port'], config['baudrate'], config['frequency'])
-        self.range_min = config['range_min']  # Минимальное расстояние сканирования
-        self.range_max = config['range_max']  # Максимальное расстояние сканирования
+        self.config = LidarConfig(**config) 
         setup_logging(log_filename='Lidar', date=True)
         self.logger = logging.getLogger('Lidar')
 
@@ -103,8 +103,8 @@ class LidarNode(Node):
                 laser_scan.scan_time = 1.0 / self.config.frequency  # Время сканирования
                 laser_scan.time_increment = 1.0 / self.config.frequency / 10 / \
                     length  # Временной интервал между измерениями
-                laser_scan.range_min = self.range_min
-                laser_scan.range_max = self.range_max  
+                laser_scan.range_min = self.config.range_min
+                laser_scan.range_max = self.config.range_max
                 laser_scan.ranges = distances.tolist()  # Список измеренных расстояний
                 laser_scan.intensities = strengths.tolist()  # Список интенсивностей
 

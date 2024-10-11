@@ -19,17 +19,16 @@ class QMC5883LNode(Node):
         setup_logging(log_filename='Compass', date=True)
         self.logger = logging.getLogger('Compass')
 
-        self.config = config
-        self.construction_angle_fix = self.config['construction_angle_fix']
+        self.config = config 
 
         # Установка местоположения
-        self.location = self.config.get('location', 'Saint-Petersburg')
-        self.logger.info(f"Using location: {self.location}")
+        location = self.config.get('location', 'Saint-Petersburg')
+        self.logger.info(f"Using location: {location}")
 
         # Получение значения склонения для указанного местоположения
         declinations = self.config['declinations']
-        self.declination = declinations.get(self.location, declinations.get('Saint-Petersburg'))
-        self.logger.debug(f"Magnetic declination for {self.location}: {self.declination}")
+        self.declination = declinations.get(location, declinations.get('Saint-Petersburg'))
+        self.logger.debug(f"Magnetic declination for {location}: {self.declination}")
         
 
         # Инициализация сенсора с использованием местоположения
@@ -63,8 +62,8 @@ class QMC5883LNode(Node):
                 self.logger.info(f'Magnetometer initialized successfully.') 
                 
                 # Выбор магнитного склонения для инициализации в зависимости от местоположения
-                sensor.declination = self.declination + self.construction_angle_fix
-                self.logger.info(f'Declination set for {self.location}: {sensor.declination}')
+                sensor.declination = self.declination + self.config['construction_angle_fix']
+                self.logger.info(f'Declination set: {self.declination} with construction redused {self.config["construction_angle_fix"]}')
                 return sensor
             except Exception as e:
                 self.logger.error(f'Init Error: {type(e).__name__} - {e}\nRetrying initialization...') 
@@ -72,7 +71,7 @@ class QMC5883LNode(Node):
     def declination_callback(self, msg):
         """Обновление магнитного склонения при получении данных от GPS"""
         self.declination = msg.data
-        self.sensor.declination = self.declination + self.construction_angle_fix
+        self.sensor.declination = self.declination + self.config['construction_angle_fix']
         self.logger.info(f'Updated declination using GPS data: {self.declination}')
 
     def read_data_continuously(self):
